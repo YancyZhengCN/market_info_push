@@ -30,7 +30,7 @@ def test_render_format():
     md = templates_mod.render(results, "2026-08-22")
     # 买入/卖出块为表格：含表头（标的后加价格列）+ 数据行（单元格无 <br>）
     assert "| 标的 | 价格 | 日 | 2日 | 周 |" in md
-    assert "|---|---|---|---|---|" in md
+    assert "|:---:|:---:|:---:|:---:|:---:|" in md
     # 默认 basis=daily：日 列单元格被加粗高亮（含 ** 标记）
     assert "**" in md and "0.88↑（0.66）" in md          # 买入行日MACD值存在且有加粗
     assert "1653.55" in md                                # 卖出行价格
