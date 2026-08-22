@@ -98,6 +98,17 @@ def _ak_symbol(index: IndexConfig) -> str:
     raise ValueError(f"无法推导 akshare symbol: {index.ts_code}")
 
 
+def _sge_symbol(index: IndexConfig) -> str:
+    """把黄金 ts_code 转成 akshare 金交所现货 symbol。
+
+    黄金 AU9999 -> Au99.99（spot_hist_sge 专用代码）。其余 AU 开头暂原样透传。
+    """
+    code = index.ts_code.upper()
+    if code == "AU9999":
+        return "Au99.99"
+    return index.ts_code
+
+
 def _get_close_akshare(index: IndexConfig, config: Config) -> pd.Series:
     """经 akshare 取日线收盘。
 
@@ -106,9 +117,21 @@ def _get_close_akshare(index: IndexConfig, config: Config) -> pd.Series:
     - index_global：港股指数走 ak.stock_hk_index_daily_sina（新浪，指数无复权）。
     - index_csi：中证指数（如港股创新药 931787）走 ak.stock_zh_index_hist_csindex
       （中证官网源，不走东财，返回中文列名）。
+    - spot_sge：上海金交所黄金现货（如黄金 AU9999）走 ak.spot_hist_sge
+      （金交所官网源，symbol=Au99.99，返回 date/open/close/low/high）。
     统一返回 DatetimeIndex 升序、去空的 close Series（取最近 lookback 段）。
     """
     import akshare as ak
+
+    # 上海金交所黄金现货：官网源，无复权概念，单独处理
+    if index.api == "spot_sge":
+        df = ak.spot_hist_sge(symbol=_sge_symbol(index))
+        if df is None or df.empty:
+            raise ValueError(f"取数为空: {index.ts_code}")
+        df = df.dropna(subset=["close"]).copy()
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.set_index("date").sort_index()
+        return df["close"].astype(float).tail(max(index.lookback, 60))
 
     # 中证指数：官网源，中文列名，单独处理
     if index.api == "index_csi":

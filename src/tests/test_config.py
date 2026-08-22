@@ -15,6 +15,7 @@ def test_infer_api_by_ts_code():
         ("511260.SH", "index_daily"),   # ETF 与 A股指数同走腾讯前复权
         ("931787.CSI", "index_csi"),    # 中证指数
         ("HKTECH", "index_global"),     # 港股指数（非数字代码）
+        ("AU9999", "spot_sge"),         # 黄金现货（上海金交所）
     ]
     for ts_code, expected in cases:
         idx = config_mod.IndexConfig(name="x", ts_code=ts_code)

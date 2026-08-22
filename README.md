@@ -92,11 +92,13 @@ DATA_SOURCE=tushare python3 main.py
 
   | 标的类型 | `indices.json` 的 `api` | akshare 接口 | symbol 示例 |
   |---|---|---|---|
-  | A股指数 | `index_daily` | `stock_zh_index_daily` | `sh000300` / `sz399673` |
-  | ETF | `fund_daily` | `fund_etf_hist_sina` | `sh511260` |
+  | A股指数 / ETF | `index_daily` | `stock_zh_a_hist_tx`（腾讯前复权 qfq） | `sh000300` / `sz399673` / `sh511260` |
   | 港股指数 | `index_global` | `stock_hk_index_daily_sina` | `HSTECH` |
+  | 中证指数 | `index_csi` | `stock_zh_index_hist_csindex` | `931787` |
+  | 黄金现货 | `spot_sge` | `spot_hist_sge` | `Au99.99` |
 
 - ⚠️ 不要改用 akshare 的 `index_zh_a_hist` / `fund_etf_hist_em` 等接口，它们底层仍是东方财富，会在受限网络下同样断连。
+- ℹ️ `api` 可省略：留空时 `config.py` 按 `ts_code` 自动推断（`AU` 开头→`spot_sge`；`.CSI`→`index_csi`；`.SH`/`.SZ`→`index_daily`；其余非数字代码→`index_global`）。
 
 ## 配置监控标的
 
