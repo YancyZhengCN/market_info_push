@@ -29,9 +29,9 @@ def test_render_format():
     ]
     md = templates_mod.render(results, "2026-08-22")
     # 买入/卖出块为表格：含表头（标的后加价格列）+ 数据行（单元格无 <br>）
-    assert "| 标的 | 价格 | 日MACD | 2日MACD | 周MACD |" in md
+    assert "| 标的 | 价格 | 日 | 2日 | 周 |" in md
     assert "|---|---|---|---|---|" in md
-    # 默认 basis=daily：日MACD 单元格被加粗高亮（含 ** 标记）
+    # 默认 basis=daily：日 列单元格被加粗高亮（含 ** 标记）
     assert "**" in md and "0.88↑（0.66）" in md          # 买入行日MACD值存在且有加粗
     assert "1653.55" in md                                # 卖出行价格
     assert "<br>" not in md                               # 确认不再输出 <br>
@@ -42,6 +42,8 @@ def test_render_format():
     assert "- **国债** (511260.SH)：" in md
     assert "不构成投资建议" in md
     assert "今日买入信号" in md and "今日卖出信号" in md
+    # 判定规则文案已更新
+    assert "判定规则：根据日/2日/周MACD识别买入或卖出" in md
     print("=== render 预览 ===")
     print(md)
     print("=== 结束 ===")
@@ -56,10 +58,27 @@ def test_basis_highlight_column():
     # 找到该行，周MACD（第 5 列）应含加粗包裹
     row = [ln for ln in md.splitlines() if ln.startswith("| 国债ETF")][0]
     cells = [c.strip() for c in row.split("|")]
-    # cells: ['', 标的, 价格, 日MACD, 2日MACD, 周MACD, '']
+    # cells: ['', 标的, 价格, 日, 2日, 周, '']
     assert "**" in cells[5], f"周MACD 列应高亮: {cells[5]}"     # 判定依据列（周）
     assert "**" not in cells[3], f"日MACD 列不应高亮: {cells[3]}"  # 非判定列
     print("PASS test_basis_highlight_column")
+
+
+def test_other_section_hidden_when_empty():
+    """无未触发/数据缺失标的时，不展示"未触发 / 数据缺失"分块；有则展示。"""
+    # 全为买/卖，无 HOLD/MISSING
+    only_signals = [
+        _sig("沪深300", "000300.SH", "BUY", 0.88, 0.66),
+        _sig("科创50", "000688.SH", "SELL", -0.36, -0.30),
+    ]
+    md = templates_mod.render(only_signals, "2026-08-22")
+    assert "未触发 / 数据缺失" not in md
+
+    # 含一个 HOLD → 应出现该分块
+    with_other = only_signals + [_sig("国债", "511260.SH", "HOLD", 0.10, 0.10)]
+    md2 = templates_mod.render(with_other, "2026-08-22")
+    assert "## — 未触发 / 数据缺失" in md2
+    print("PASS test_other_section_hidden_when_empty")
 
 
 def test_session_title():

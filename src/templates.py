@@ -36,7 +36,7 @@ def _fmt_cell(m: PeriodMACD) -> str:
 
 
 _TABLE_HEADER = [
-    "| 标的 | 价格 | 日MACD | 2日MACD | 周MACD |",
+    "| 标的 | 价格 | 日 | 2日 | 周 |",
     "|---|---|---|---|---|",
 ]
 
@@ -83,11 +83,11 @@ def render(results: list[Signal], date: str, hour: int | None = None) -> str:
 
     lines = [
         f"# 📊 指数MACD信号{session}报 ({date})",
-        "> 判定规则：日MACD柱(BAR) 较前一日 **变多 → 买入** ｜ **变少 → 卖出**（2日/周线仅展示）",
+        "> 判定规则：根据日/2日/周MACD识别买入或卖出",
         "",
     ]
 
-    lines.append("## 🟢 今日买入信号（日MACD柱变多）")
+    lines.append("## 🟢 今日买入信号")
     lines.append("")
     if buy:
         lines.extend(_table(buy))
@@ -95,23 +95,22 @@ def render(results: list[Signal], date: str, hour: int | None = None) -> str:
         lines.append("- 无")
 
     lines.append("")
-    lines.append("## 🔴 今日卖出信号（日MACD柱变少）")
+    lines.append("## 🔴 今日卖出信号")
     lines.append("")
     if sell:
         lines.extend(_table(sell))
     else:
         lines.append("- 无")
 
-    lines.append("")
-    lines.append("## — 未触发 / 数据缺失")
+    # 仅在存在未触发/数据缺失标的时才展示该分块
     if other:
+        lines.append("")
+        lines.append("## — 未触发 / 数据缺失")
         for r in other:
             if r.status == "MISSING":
                 lines.append(f"- **{r.name}** ({r.ts_code})：数据缺失（取数失败，不参与判定）")
             else:
                 lines.append(f"- **{r.name}** ({r.ts_code})：日MACD {_fmt_period(r.daily)} ｜ 2日MACD {_fmt_period(r.p2d)} ｜ 周MACD {_fmt_period(r.weekly)}")
-    else:
-        lines.append("- 无")
 
     lines.extend(
         [
