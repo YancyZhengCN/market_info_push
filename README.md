@@ -102,18 +102,23 @@ DATA_SOURCE=tushare python3 main.py
 
 ## 配置监控标的
 
-编辑 `indices.json`，每项包含 `name` / `ts_code` / `api`（可选 `lookback`，默认 120）：
+编辑 `indices.json`，每项必填 `name` / `ts_code`，可选 `basis`（判定周期，默认 `daily`）、`api`（取数接口，留空自动推断）、`lookback`（默认 120）：
 
 ```json
 [
-  { "name": "沪深300",       "ts_code": "000300.SH", "api": "index_daily"  },
-  { "name": "十年期国债ETF", "ts_code": "511260.SH", "api": "fund_daily"   },
-  { "name": "恒生科技",       "ts_code": "HKTECH",    "api": "index_global" }
+  { "name": "沪深300",      "ts_code": "000300.SH", "basis": "daily"  },
+  { "name": "科创50",       "ts_code": "000688.SH", "basis": "daily"  },
+  { "name": "创业板50",     "ts_code": "399673.SZ", "basis": "daily"  },
+  { "name": "恒生科技",     "ts_code": "HKTECH",    "basis": "daily"  },
+  { "name": "十年期国债ETF", "ts_code": "511260.SH", "basis": "weekly" },
+  { "name": "港股创新药",    "ts_code": "931787.CSI", "basis": "daily"  },
+  { "name": "黄金9999",     "ts_code": "AU9999",     "basis": "daily"  }
 ]
 ```
 
-- `ts_code`：A股用 `代码.SH` / `代码.SZ`，港股恒生科技固定用 `HKTECH`。
-- `api` 仅允许 `index_daily` / `index_global` / `fund_daily`。
+- `ts_code`：A股/ETF 用 `代码.SH` / `代码.SZ`，港股恒生科技固定用 `HKTECH`，中证指数用 `代码.CSI`，黄金现货用 `AU9999`。
+- `basis`：判定所依据的 MACD 周期，`daily`（日）/ `2d`（2日）/ `weekly`（周），默认 `daily`（如国债ETF 用 `weekly`）；推送表格中该周期列会加粗高亮。
+- `api`：**可省略**，留空时按 `ts_code` 自动推断（`AU` 开头→`spot_sge`；`.CSI`→`index_csi`；`.SH`/`.SZ`→`index_daily`；其余非数字代码→`index_global`）。合法值：`index_daily` / `index_global` / `fund_daily` / `index_csi` / `spot_sge`。
 - 也可用 `INDICES_URL` 从远程（对象存储）动态拉取清单。
 
 ## 运行测试
