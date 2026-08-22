@@ -1,0 +1,8 @@
+[
+  { "name": "沪深300",      "ts_code": "000300.SH", "basis": "daily"  },
+  { "name": "科创50",       "ts_code": "000688.SH", "basis": "daily"  },
+  { "name": "创业板50",     "ts_code": "399673.SZ", "basis": "daily"  },
+  { "name": "恒生科技",     "ts_code": "HKTECH",    "basis": "daily"  },
+  { "name": "十年期国债ETF", "ts_code": "511260.SH", "basis": "weekly" },
+  { "name": "港股创新药",    "ts_code": "931787.CSI", "basis": "daily"  }
+]

@@ -1,0 +1,19 @@
+# ===== 密钥，切勿提交 =====
+.env
+*.env
+!.env.example
+
+# ===== Python 缓存 =====
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# ===== 部署构建产物 =====
+dist/
+*.zip
+
+# ===== IDE / 系统文件 =====
+.idea/
+.vscode/
+.DS_Store

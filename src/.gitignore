@@ -1,0 +1,10 @@
+# 密钥，切勿提交
+.env
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 部署构建产物
+dist/
