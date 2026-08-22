@@ -35,21 +35,23 @@ mkdir -p "${BUILD_DIR}"
 
 # 步骤1：常规安装全部依赖（解析并装齐纯 Python 依赖；二进制此刻是本机 macOS 版，稍后覆盖）
 echo ">>> [1/3] 常规安装全部依赖"
-python3 -m pip install --no-cache-dir --target "${BUILD_DIR}" -r "${SRC_DIR}/requirements.txt"
+python3 -m pip install --target "${BUILD_DIR}" -r "${SRC_DIR}/requirements.txt"
 
 # 步骤2：用 Linux wheel 覆盖含 C 扩展的包（manylinux2014）
 echo ">>> [2/3] 覆盖为 Linux wheel: ${BINARY_PKGS[*]}"
 python3 -m pip install \
-  --no-cache-dir --platform "${PLATFORM}" --python-version "${PY_ABI}" \
+  --platform "${PLATFORM}" --python-version "${PY_ABI}" \
   --implementation cp --only-binary=:all: --no-deps \
   --target "${BUILD_DIR}" --upgrade \
   "${BINARY_PKGS[@]}"
 
 # 步骤3：用 Linux wheel 覆盖 mini-racer（manylinux_2_31，V8 原生库）
 # 注：mini-racer 的 Linux wheel 可能仅在官方 PyPI 提供，故显式指定官方源。
+#     mini-racer 从官方 PyPI 跨境下载约 15MB、耗时数分钟，是整个打包最慢的一步；
+#     故此处（及步骤1/2）不加 --no-cache-dir，让 pip 复用本地缓存，重建时无需重复下载。
 echo ">>> [3/3] 覆盖为 Linux wheel: ${NEWLIBC_PKGS[*]}"
 python3 -m pip install \
-  --no-cache-dir --index-url https://pypi.org/simple/ \
+  --index-url https://pypi.org/simple/ \
   --platform "${PLATFORM_NEW}" --python-version "${PY_ABI}" \
   --implementation cp --only-binary=:all: --no-deps \
   --target "${BUILD_DIR}" --upgrade \
