@@ -16,4 +16,5 @@ dist/
 # ===== IDE / 系统文件 =====
 .idea/
 .vscode/
+*.code-workspace
 .DS_Store

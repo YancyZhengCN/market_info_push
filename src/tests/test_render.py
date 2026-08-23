@@ -9,21 +9,22 @@ from signals import PeriodMACD, Signal
 import templates as templates_mod
 
 
-def _sig(name, code, status, bar, bp, price=100.0, basis="daily"):
+def _sig(name, code, status, bar, bp, price=100.0, basis="daily", pct_change=None):
     return Signal(
         name, code, status,
         PeriodMACD(bar, bp, "前1日"),
         PeriodMACD(bar, bp, "前2日"),
         PeriodMACD(bar, bp, "前1周"),
         price=price,
+        pct_change=pct_change,
         basis=basis,
     )
 
 
 def test_render_format():
     results = [
-        _sig("沪深300", "000300.SH", "BUY", 0.88, 0.66, price=4618.90),
-        _sig("科创50", "000688.SH", "SELL", -0.36, -0.30, price=1653.55),
+        _sig("沪深300", "000300.SH", "BUY", 0.88, 0.66, price=4618.90, pct_change=0.35),
+        _sig("科创50", "000688.SH", "SELL", -0.36, -0.30, price=1653.55, pct_change=-1.20),
         _sig("恒生科技", "HKTECH", "MISSING", None, None),
         _sig("国债", "511260.SH", "HOLD", 0.10, 0.10, price=135.77),
     ]
@@ -31,6 +32,10 @@ def test_render_format():
     # 买入/卖出块为表格：含表头（标的后加价格列）+ 数据行（单元格无 <br>）
     assert "| 标的 | 价格 | 日 | 2日 | 周 |" in md
     assert "|:---:|:---:|:---:|:---:|:---:|" in md
+    # 价格列带涨跌%（全角括号、正负号）
+    assert "4618.90（+0.35%）" in md
+    assert "1653.55（-1.20%）" in md
+    # 无 pct_change 时价格列只显示价格（国债 HOLD 在未触发块的价格另算，此处校验买卖块即可）
     # 默认 basis=daily：日 列单元格被加粗高亮（含 ** 标记）
     assert "**" in md and "0.88↑（0.66）" in md          # 买入行日MACD值存在且有加粗
     assert "1653.55" in md                                # 卖出行价格

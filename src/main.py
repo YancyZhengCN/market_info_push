@@ -40,7 +40,13 @@ def _process_index(idx: config_mod.IndexConfig, cfg: config_mod.Config, pro) -> 
         p2 = macd_mod.compute(close, "2d")
         w = macd_mod.compute(close, "weekly")
         price = float(close.iloc[-1]) if len(close) else None
-        sig = signal_mod.build_signal(idx.name, idx.ts_code, d, p2, w, price, idx.basis)
+        # 当天涨跌幅(%)：(最新收盘 - 前一日收盘) / 前一日收盘 × 100
+        pct_change = None
+        if len(close) >= 2:
+            prev_close = float(close.iloc[-2])
+            if prev_close:
+                pct_change = (float(close.iloc[-1]) - prev_close) / prev_close * 100
+        sig = signal_mod.build_signal(idx.name, idx.ts_code, d, p2, w, price, idx.basis, pct_change)
         logger.info(
             "标的 %s → %s (判定周期 %s | 日BAR %.4f / 前1日 %.4f)",
             idx.name,

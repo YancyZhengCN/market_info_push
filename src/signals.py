@@ -39,6 +39,7 @@ class Signal:
     p2d: PeriodMACD
     weekly: PeriodMACD
     price: float | None = None  # 最新收盘价（取数序列末值）
+    pct_change: float | None = None  # 当天涨跌幅(%)：(最新收盘 - 前一日收盘)/前一日收盘×100
     basis: str = "daily"        # 判定依据周期：daily / 2d / weekly
 
     @property
@@ -67,6 +68,7 @@ def build_signal(
     weekly: macd_mod.MACDResult,
     price: float | None = None,
     basis: str = "daily",
+    pct_change: float | None = None,
 ) -> Signal:
     # 按 basis 选定判定周期（默认日线）
     basis_result = {"daily": daily, "2d": p2d, "weekly": weekly}.get(basis, daily)
@@ -79,6 +81,7 @@ def build_signal(
         p2d=PeriodMACD(p2d.bar, p2d.bar_prev, PREV_LABEL["2d"]),
         weekly=PeriodMACD(weekly.bar, weekly.bar_prev, PREV_LABEL["weekly"]),
         price=price,
+        pct_change=pct_change,
         basis=basis,
     )
 

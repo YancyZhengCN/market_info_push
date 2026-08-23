@@ -42,8 +42,17 @@ _TABLE_HEADER = [
 ]
 
 
-def _fmt_price(price: float | None) -> str:
-    return f"{price:.2f}" if price is not None else "—"
+def _fmt_price(price: float | None, pct_change: float | None = None) -> str:
+    """价格单元格：价格（涨跌%），如 4618.90（+0.35%）。
+
+    括号用全角（CJK 提供换行断点，窄屏可折行不撑宽，与 _fmt_cell 一致）；
+    涨跌带正负号，缺失时只显示价格、无括号。
+    """
+    if price is None:
+        return "—"
+    if pct_change is None:
+        return f"{price:.2f}"
+    return f"{price:.2f}（{pct_change:+.2f}%）"
 
 
 def _emphasize(text: str) -> str:
@@ -62,7 +71,7 @@ def _table_row(r: Signal) -> str:
     if basis in cells:
         cells[basis] = _emphasize(cells[basis])
     return (
-        f"| {r.name} | {_fmt_price(r.price)} | "
+        f"| {r.name} | {_fmt_price(r.price, r.pct_change)} | "
         f"{cells['daily']} | {cells['p2d']} | {cells['weekly']} |"
     )
 
