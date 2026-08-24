@@ -54,25 +54,36 @@ def get_close(index: IndexConfig, config: Config, pro=None) -> pd.Series:
 
     source = (config.data_source or "tushare").lower()
     if source == "akshare":
-        close = _get_close_akshare(index, config)
+        close = _get_close_akshare_retry(index, config)
         return _maybe_append_spot(close, index, config)
     if source == "tushare":
         if not config.tushare_token:
             # 无 token 自动降级到 AkShare（东方财富，免 token）
-            close = _get_close_akshare(index, config)
+            close = _get_close_akshare_retry(index, config)
             return _maybe_append_spot(close, index, config)
         return _get_close_tushare(index, config, pro)
 
     raise ValueError(f"未知数据源: {source}")
 
 
+def _get_close_akshare_retry(index: IndexConfig, config: Config) -> pd.Series:
+    """日线取数带重试：akshare 偶发网络抖动/限流，重试若干次再判失败，
+    降低单标的因一次抖动就被标记 MISSING（数据缺失）的概率。"""
+    import retry_util
+
+    return retry_util.call_with_retry(
+        lambda: _get_close_akshare(index, config), what=f"日线取数 {index.ts_code}"
+    )
+
+
 def _maybe_append_spot(close: pd.Series, index: IndexConfig, config: Config) -> pd.Series:
     """盘中把实时价作为「当天临时收盘价」拼接到日线序列末尾，算动态 MACD。
 
-    仅在满足以下条件时拼接（否则原样返回日线，静默降级）：
-    - config.realtime_intraday 开启；
-    - 序列末行日期 < 今天（当天日 K 尚未生成，即处于盘中或收盘数据未更新）；
-    - 能取到该标的实时价（realtime_client.get_spot 返回非 None）。
+    - config.realtime_intraday 关闭：直接用日线（用户主动选择日线口径，不算误导）。
+    - 序列末行日期 >= 今天（当天日 K 已生成）：无需拼接，直接返回。
+    - 序列末行 < 今天（盘中，当天日 K 未生成）：**必须**拿到实时价拼接；
+      若实时价取不到（重试后仍失败 / 无实时源），则**抛异常**让该标的标记 MISSING，
+      **绝不回退显示上一交易日日线**——否则用户会误以为是今天的数据。
     实时价用今天作为索引追加；若已有今天则替换。
     """
     if not getattr(config, "realtime_intraday", True):
@@ -89,7 +100,11 @@ def _maybe_append_spot(close: pd.Series, index: IndexConfig, config: Config) -> 
 
     spot = realtime_client.get_spot(index)
     if spot is None:
-        return close  # 无实时源 / 取价失败 → 用日线（降级）
+        # 盘中但实时价取不到：不能回退用上一交易日日线（会误导用户以为是今天），
+        # 抛异常 → 上层标记 MISSING → 进「数据缺失」块。
+        raise ValueError(
+            f"盘中实时价取不到（{index.ts_code}），拒绝回退上一交易日日线，标记数据缺失"
+        )
 
     out = close.copy()
     out.loc[today] = float(spot)

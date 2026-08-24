@@ -4,6 +4,7 @@ import os
 import sys
 
 import pandas as pd
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -41,13 +42,13 @@ def test_append_spot_when_intraday(monkeypatch):
     print("PASS test_append_spot_when_intraday")
 
 
-def test_no_spot_source_fallback(monkeypatch):
-    """实时价取不到（None）→ 原样返回日线，不追加。"""
+def test_intraday_no_spot_raises(monkeypatch):
+    """盘中实时价取不到（None）→ 抛异常（标记 MISSING），绝不回退上一交易日日线。"""
     monkeypatch.setattr(realtime_client, "get_spot", lambda index: None)
     close = _daily_series(dt.date.today() - dt.timedelta(days=1))
-    out = ts_client._maybe_append_spot(close, _idx(), _cfg())
-    assert len(out) == len(close)
-    print("PASS test_no_spot_source_fallback")
+    with pytest.raises(Exception):
+        ts_client._maybe_append_spot(close, _idx(), _cfg())
+    print("PASS test_intraday_no_spot_raises")
 
 
 def test_switch_off(monkeypatch):
@@ -83,7 +84,7 @@ if __name__ == "__main__":
     class _MP:
         def setattr(self, obj, name, val): setattr(obj, name, val)
     test_append_spot_when_intraday(_MP())
-    test_no_spot_source_fallback(_MP())
+    test_intraday_no_spot_raises(_MP())
     test_switch_off(_MP())
     test_already_today_no_append(_MP())
     print("test_realtime OK")

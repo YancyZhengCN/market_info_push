@@ -29,20 +29,25 @@ def _is_etf(ts_code: str) -> bool:
 
 
 def get_spot(index: IndexConfig) -> Optional[float]:
-    """取标的当天实时价；无源或失败返回 None。"""
+    """取标的当天实时价；无源或（重试后仍）失败返回 None，由上层降级用日线。"""
+    api = index.api
+    if api == "index_daily":
+        fetch = _spot_etf if _is_etf(index.ts_code) else _spot_a_index
+    elif api == "index_global":
+        fetch = _spot_hk_index
+    elif api == "spot_sge":
+        fetch = _spot_gold
+    else:
+        return None  # index_csi 等无实时源
+
+    import retry_util
+
     try:
-        api = index.api
-        if api == "index_daily":
-            if _is_etf(index.ts_code):
-                return _spot_etf(index)
-            return _spot_a_index(index)
-        if api == "index_global":
-            return _spot_hk_index(index)
-        if api == "spot_sge":
-            return _spot_gold(index)
-        # index_csi 等无实时源
-        return None
-    except Exception as e:  # 实时取价失败一律降级，不阻断
+        # 偶发网络抖动/限流：重试若干次再判失败，降低"取到上一交易日"的概率
+        return retry_util.call_with_retry(
+            lambda: fetch(index), what=f"实时取价 {index.ts_code}"
+        )
+    except Exception as e:  # 重试后仍失败 → 降级用日线，不阻断
         logger.warning("实时取价失败（降级用日线）: %s -> %s", index.ts_code, e)
         return None
 
