@@ -54,14 +54,46 @@ def get_close(index: IndexConfig, config: Config, pro=None) -> pd.Series:
 
     source = (config.data_source or "tushare").lower()
     if source == "akshare":
-        return _get_close_akshare(index, config)
+        close = _get_close_akshare(index, config)
+        return _maybe_append_spot(close, index, config)
     if source == "tushare":
         if not config.tushare_token:
             # 无 token 自动降级到 AkShare（东方财富，免 token）
-            return _get_close_akshare(index, config)
+            close = _get_close_akshare(index, config)
+            return _maybe_append_spot(close, index, config)
         return _get_close_tushare(index, config, pro)
 
     raise ValueError(f"未知数据源: {source}")
+
+
+def _maybe_append_spot(close: pd.Series, index: IndexConfig, config: Config) -> pd.Series:
+    """盘中把实时价作为「当天临时收盘价」拼接到日线序列末尾，算动态 MACD。
+
+    仅在满足以下条件时拼接（否则原样返回日线，静默降级）：
+    - config.realtime_intraday 开启；
+    - 序列末行日期 < 今天（当天日 K 尚未生成，即处于盘中或收盘数据未更新）；
+    - 能取到该标的实时价（realtime_client.get_spot 返回非 None）。
+    实时价用今天作为索引追加；若已有今天则替换。
+    """
+    if not getattr(config, "realtime_intraday", True):
+        return close
+    if close is None or len(close) == 0 or not isinstance(close.index, pd.DatetimeIndex):
+        return close
+
+    today = pd.Timestamp(dt.date.today())
+    last_day = close.index[-1].normalize()
+    if last_day >= today:
+        return close  # 当天日 K 已生成，无需拼接
+
+    import realtime_client
+
+    spot = realtime_client.get_spot(index)
+    if spot is None:
+        return close  # 无实时源 / 取价失败 → 用日线（降级）
+
+    out = close.copy()
+    out.loc[today] = float(spot)
+    return out.sort_index()
 
 
 # ---------- Tushare 源 ----------

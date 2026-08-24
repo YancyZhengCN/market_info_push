@@ -90,15 +90,16 @@ DATA_SOURCE=tushare python3 main.py
 - **推荐 `akshare` 免 token**，底层走**新浪 / 腾讯源**，规避东方财富行情接口在部分网络（公司网络 / 防火墙）下被断连的问题。
 - akshare 各标的对应接口：
 
-  | 标的类型 | `indices.json` 的 `api` | akshare 接口 | symbol 示例 |
-  |---|---|---|---|
-  | A股指数 / ETF | `index_daily` | `stock_zh_a_hist_tx`（腾讯前复权 qfq） | `sh000300` / `sz399673` / `sh511260` |
-  | 港股指数 | `index_global` | `stock_hk_index_daily_sina` | `HSTECH` |
-  | 中证指数 | `index_csi` | `stock_zh_index_hist_csindex` | `931787` |
-  | 黄金现货 | `spot_sge` | `spot_hist_sge` | `Au99.99` |
+  | 标的类型 | `indices.json` 的 `api` | akshare 日线接口 | 盘中实时接口 | symbol 示例 |
+  |---|---|---|---|---|
+  | A股指数 | `index_daily` | `stock_zh_a_hist_tx`（腾讯前复权） | `stock_zh_index_spot_sina` | `sh000300` / `sz399673` |
+  | ETF | `index_daily` | `stock_zh_a_hist_tx`（腾讯前复权） | `stock_zh_a_minute`（新浪分钟） | `sh511260` / `sh513120` |
+  | 港股指数 | `index_global` | `stock_hk_index_daily_sina` | `stock_hk_index_spot_sina` | `HSTECH` |
+  | 黄金现货 | `spot_sge` | `spot_hist_sge` | `spot_quotations_sge` | `Au99.99` |
 
 - ⚠️ 不要改用 akshare 的 `index_zh_a_hist` / `fund_etf_hist_em` 等接口，它们底层仍是东方财富，会在受限网络下同样断连。
 - ℹ️ `api` 可省略：留空时 `config.py` 按 `ts_code` 自动推断（`AU` 开头→`spot_sge`；`.CSI`→`index_csi`；`.SH`/`.SZ`→`index_daily`；其余非数字代码→`index_global`）。
+- ⏱️ **盘中动态 MACD**：日线接口在收盘前不含当天日 K。`REALTIME_INTRADAY=true`（默认）时，盘中会取「实时接口」的当天价拼接为临时收盘价算 MACD，信号随行情跳变；收盘后当天日 K 生成自动回到确定值。设 `REALTIME_INTRADAY=false` 则只用日线历史。
 
 ## 配置监控标的
 
@@ -111,7 +112,7 @@ DATA_SOURCE=tushare python3 main.py
   { "name": "创业板50",     "ts_code": "399673.SZ", "basis": "daily"  },
   { "name": "恒生科技",     "ts_code": "HKTECH",    "basis": "daily"  },
   { "name": "十年期国债ETF", "ts_code": "511260.SH", "basis": "weekly" },
-  { "name": "港股创新药",    "ts_code": "931787.CSI", "basis": "daily"  },
+  { "name": "港股创新药",    "ts_code": "513120.SH", "basis": "daily"  },
   { "name": "黄金9999",     "ts_code": "AU9999",     "basis": "daily"  }
 ]
 ```

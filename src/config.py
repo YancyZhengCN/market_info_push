@@ -76,6 +76,7 @@ class Config:
     data_source: str
     indices: list[IndexConfig]
     indices_url: str | None = None
+    realtime_intraday: bool = True  # 盘中把实时价作为当天临时收盘价拼接，算动态 MACD
 
     @property
     def serverchan_sendkeys(self) -> list[str]:
@@ -93,6 +94,7 @@ class Config:
         log_level = os.getenv("LOG_LEVEL", "INFO")
         data_source = os.getenv("DATA_SOURCE", "tushare").lower()
         indices_url = os.getenv("INDICES_URL") or None
+        realtime_intraday = os.getenv("REALTIME_INTRADAY", "true").lower() == "true"
 
         indices = cls._load_indices(indices_path, indices_url)
         for idx in indices:
@@ -107,6 +109,7 @@ class Config:
             data_source=data_source,
             indices=indices,
             indices_url=indices_url,
+            realtime_intraday=realtime_intraday,
         )
 
         # 真实推送（Server酱 → 个人微信）仅需 SendKey；免确认、支持 markdown

@@ -4,6 +4,6 @@
   { "name": "创业板50",     "ts_code": "399673.SZ", "basis": "daily"  },
   { "name": "恒生科技",     "ts_code": "HKTECH",    "basis": "daily"  },
   { "name": "十年期国债ETF", "ts_code": "511260.SH", "basis": "weekly" },
-  { "name": "港股创新药",    "ts_code": "931787.CSI", "basis": "daily"  },
+  { "name": "港股创新药ETF", "ts_code": "513120.SH", "basis": "daily"  },
   { "name": "黄金9999",     "ts_code": "AU9999",     "basis": "daily"  }
 ]
