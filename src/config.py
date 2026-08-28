@@ -39,7 +39,7 @@ class IndexConfig:
         """按 ts_code 推断取数接口类型：
         - AU9999 / 以 AU 开头   -> spot_sge     （上海金交所黄金现货，如黄金 AU9999）
         - .CSI 结尾            -> index_csi   （中证指数，如港股创新药 931787.CSI）
-        - .SH / .SZ 结尾       -> index_daily （A股指数与 ETF 同走腾讯前复权，无需区分）
+        - .SH / .SZ / .BJ 结尾 -> index_daily （A股/北交所指数与 ETF 同走腾讯前复权）
         - 其余（非数字代码，如 HKTECH） -> index_global（港股指数，新浪源）
         """
         code = self.ts_code.upper()
@@ -47,7 +47,7 @@ class IndexConfig:
             return "spot_sge"
         if code.endswith(".CSI"):
             return "index_csi"
-        if code.endswith(".SH") or code.endswith(".SZ"):
+        if code.endswith((".SH", ".SZ", ".BJ")):
             return "index_daily"
         return "index_global"
 

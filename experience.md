@@ -212,6 +212,9 @@
 - 已支持 api 类型：`index_daily`（A股指数/ETF，腾讯前复权）、`index_global`（港股，新浪）、
   `index_csi`（中证指数，官网源）、`spot_sge`（金交所黄金现货）。
 - 黄金现货**无复权概念**，直接用现货收盘价算 MACD。
+- 北证50（`899050.BJ`）同样走 `index_daily`：腾讯日线 symbol 为 `bj899050`；新浪指数实时全量接口
+  不收录它，盘中改用 `stock_zh_a_minute(symbol="bj899050")` 的最后一根分钟 close。配置的代码
+  自动推断需将 `.BJ` 与 `.SH`/`.SZ` 一起映射到 `index_daily`。
 
 ## 11. 推送渲染样式经验（Server酱 markdown）
 

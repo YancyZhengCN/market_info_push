@@ -12,6 +12,7 @@ def test_infer_api_by_ts_code():
     cases = [
         ("000300.SH", "index_daily"),   # A股指数
         ("399673.SZ", "index_daily"),   # 深市指数
+        ("899050.BJ", "index_daily"),   # 北证50指数
         ("511260.SH", "index_daily"),   # ETF 与 A股指数同走腾讯前复权
         ("931787.CSI", "index_csi"),    # 中证指数
         ("HKTECH", "index_global"),     # 港股指数（非数字代码）

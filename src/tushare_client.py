@@ -131,7 +131,7 @@ def _get_close_tushare(index: IndexConfig, config: Config, pro=None) -> pd.Serie
 def _ak_symbol(index: IndexConfig) -> str:
     """把 ts_code 转成 akshare 新浪源 symbol（含市场前缀）。
 
-    沪深指数 000300.SH -> sh000300；399673.SZ -> sz399673。
+    沪深指数 000300.SH -> sh000300；399673.SZ -> sz399673；北证50 899050.BJ -> bj899050。
     ETF     511260.SH -> sh511260；159915.SZ -> sz159915。
     港股指数 HKTECH    -> HSTECH（stock_hk_index_daily_sina 专用代码，无前缀）。
     """
@@ -142,6 +142,8 @@ def _ak_symbol(index: IndexConfig) -> str:
         return "sh" + code.split(".")[0]
     if code.endswith(".SZ"):
         return "sz" + code.split(".")[0]
+    if code.endswith(".BJ"):
+        return "bj" + code.split(".")[0]
     raise ValueError(f"无法推导 akshare symbol: {index.ts_code}")
 
 

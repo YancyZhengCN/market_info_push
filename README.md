@@ -92,7 +92,7 @@ DATA_SOURCE=tushare python3 main.py
 
   | 标的类型 | `indices.json` 的 `api` | akshare 日线接口 | 盘中实时接口 | symbol 示例 |
   |---|---|---|---|---|
-  | A股指数 | `index_daily` | `stock_zh_a_hist_tx`（腾讯前复权） | `stock_zh_index_spot_sina` | `sh000300` / `sz399673` |
+  | A股 / 北证指数 | `index_daily` | `stock_zh_a_hist_tx`（腾讯前复权） | A股：`stock_zh_index_spot_sina`；北证：`stock_zh_a_minute` | `sh000300` / `sz399673` / `bj899050` |
   | ETF | `index_daily` | `stock_zh_a_hist_tx`（腾讯前复权） | `stock_zh_a_minute`（新浪分钟） | `sh511260` / `sh513120` |
   | 港股指数 | `index_global` | `stock_hk_index_daily_sina` | `stock_hk_index_spot_sina` | `HSTECH` |
   | 黄金现货 | `spot_sge` | `spot_hist_sge` | `spot_quotations_sge` | `Au99.99` |
@@ -113,13 +113,14 @@ DATA_SOURCE=tushare python3 main.py
   { "name": "恒生科技",     "ts_code": "HKTECH",    "basis": "daily"  },
   { "name": "十年期国债ETF", "ts_code": "511260.SH", "basis": "weekly" },
   { "name": "港股创新药",    "ts_code": "513120.SH", "basis": "daily"  },
+  { "name": "北证50",       "ts_code": "899050.BJ", "basis": "2d"     },
   { "name": "黄金9999",     "ts_code": "AU9999",     "basis": "daily"  }
 ]
 ```
 
-- `ts_code`：A股/ETF 用 `代码.SH` / `代码.SZ`，港股恒生科技固定用 `HKTECH`，中证指数用 `代码.CSI`，黄金现货用 `AU9999`。
+- `ts_code`：A股/ETF 用 `代码.SH` / `代码.SZ`，北证指数用 `代码.BJ`，港股恒生科技固定用 `HKTECH`，中证指数用 `代码.CSI`，黄金现货用 `AU9999`。
 - `basis`：判定所依据的 MACD 周期，`daily`（日）/ `2d`（2日）/ `weekly`（周），默认 `daily`（如国债ETF 用 `weekly`）；推送表格中该周期列会加粗高亮。
-- `api`：**可省略**，留空时按 `ts_code` 自动推断（`AU` 开头→`spot_sge`；`.CSI`→`index_csi`；`.SH`/`.SZ`→`index_daily`；其余非数字代码→`index_global`）。合法值：`index_daily` / `index_global` / `fund_daily` / `index_csi` / `spot_sge`。
+- `api`：**可省略**，留空时按 `ts_code` 自动推断（`AU` 开头→`spot_sge`；`.CSI`→`index_csi`；`.SH`/`.SZ`/`.BJ`→`index_daily`；其余非数字代码→`index_global`）。合法值：`index_daily` / `index_global` / `fund_daily` / `index_csi` / `spot_sge`。
 - 也可用 `INDICES_URL` 从远程（对象存储）动态拉取清单。
 
 ## 运行测试

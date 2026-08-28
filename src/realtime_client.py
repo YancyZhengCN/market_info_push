@@ -6,6 +6,7 @@
 各 api 类型的实时源（均为新浪/腾讯/金交所官网，非东财）：
 - index_daily（A股指数）：ak.stock_zh_index_spot_sina（含 sh000300 / sz399673 等）
 - index_daily（ETF）    ：ak.stock_zh_a_minute（新浪分钟线，取最后一根 close 作为实时价）
+- index_daily（北证指数）：ak.stock_zh_a_minute（新浪分钟线，支持 bj899050）
 - index_global（港股指数）：ak.stock_hk_index_spot_sina（含 HSTECH）
 - spot_sge（黄金现货）   ：ak.spot_quotations_sge（Au99.99 现价）
 - index_csi（中证指数）  ：**无可用实时源**，返回 None（盘中不参与，由上层剔除）
@@ -28,11 +29,20 @@ def _is_etf(ts_code: str) -> bool:
     return code.startswith(("51", "56", "58", "159", "15"))
 
 
+def _is_bj_index(ts_code: str) -> bool:
+    return ts_code.upper().endswith(".BJ")
+
+
 def get_spot(index: IndexConfig) -> Optional[float]:
     """取标的当天实时价；无源或（重试后仍）失败返回 None，由上层降级用日线。"""
     api = index.api
     if api == "index_daily":
-        fetch = _spot_etf if _is_etf(index.ts_code) else _spot_a_index
+        if _is_etf(index.ts_code):
+            fetch = _spot_etf
+        elif _is_bj_index(index.ts_code):
+            fetch = _spot_bj_index
+        else:
+            fetch = _spot_a_index
     elif api == "index_global":
         fetch = _spot_hk_index
     elif api == "spot_sge":
@@ -80,6 +90,20 @@ def _spot_etf(index: IndexConfig) -> Optional[float]:
         symbol = "sz" + code.split(".")[0]
     else:
         return None
+    df = ak.stock_zh_a_minute(symbol=symbol, period="1", adjust="qfq")
+    if df is None or df.empty:
+        return None
+    return float(df["close"].iloc[-1])
+
+
+def _spot_bj_index(index: IndexConfig) -> Optional[float]:
+    """北证指数实时：新浪分钟线最后一根 close（指数实时全量接口不收录 bj899050）。"""
+    import akshare as ak
+
+    code = index.ts_code.upper()
+    if not code.endswith(".BJ"):
+        return None
+    symbol = "bj" + code.split(".")[0]
     df = ak.stock_zh_a_minute(symbol=symbol, period="1", adjust="qfq")
     if df is None or df.empty:
         return None
