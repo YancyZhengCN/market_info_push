@@ -26,6 +26,12 @@ _TUSHARE_API_MAP = {
     "fund_daily": "fund_daily",
 }
 
+# 喂给 MACD 的最小预热行数 ≈ 3 年交易日。
+# 2 日线把日线两两合成后有效样本减半，需更长预热才能与东方财富逐值对齐；
+# 实测 ≥300 根日线 2 日 BAR 即收敛到东财，取 3 年(≈730 根)留足余量。
+# 计算成本可忽略（O(n)，全程个位数毫秒）；拉取多约 1s，由多标的并发吸收。
+_MIN_BARS = 730
+
 
 def _pro(token: str):
     import tushare as ts
@@ -117,7 +123,8 @@ def _get_close_tushare(index: IndexConfig, config: Config, pro=None) -> pd.Serie
         pro = _pro(config.tushare_token)
     api_name = _TUSHARE_API_MAP[index.api]
     end = dt.date.today().strftime("%Y%m%d")
-    start = (dt.date.today() - dt.timedelta(days=index.lookback * 2)).strftime("%Y%m%d")
+    # 起始日按 _MIN_BARS 交易日折算（×1.5 覆盖周末/节假日的非交易日），保证足够预热
+    start = (dt.date.today() - dt.timedelta(days=int(max(index.lookback, _MIN_BARS) * 1.5))).strftime("%Y%m%d")
     df = getattr(pro, api_name)(ts_code=index.ts_code, start_date=start, end_date=end)
     if df is None or df.empty:
         raise ValueError(f"取数为空: {index.ts_code}")
@@ -180,7 +187,7 @@ def _get_close_akshare(index: IndexConfig, config: Config) -> pd.Series:
         df = df.dropna(subset=["close"]).copy()
         df["date"] = pd.to_datetime(df["date"])
         df = df.set_index("date").sort_index()
-        return df["close"].astype(float).tail(max(index.lookback, 60))
+        return df["close"].astype(float).tail(max(index.lookback, _MIN_BARS))
 
     # 中证指数：官网源，中文列名，单独处理
     if index.api == "index_csi":
@@ -192,7 +199,7 @@ def _get_close_akshare(index: IndexConfig, config: Config) -> pd.Series:
         df = df.dropna(subset=["close"]).copy()
         df["date"] = pd.to_datetime(df["date"])
         df = df.set_index("date").sort_index()
-        return df["close"].astype(float).tail(max(index.lookback, 60))
+        return df["close"].astype(float).tail(max(index.lookback, _MIN_BARS))
 
     symbol = _ak_symbol(index)
     if index.api == "index_global":
@@ -200,11 +207,11 @@ def _get_close_akshare(index: IndexConfig, config: Config) -> pd.Series:
         df = ak.stock_hk_index_daily_sina(symbol=symbol)
     else:
         # A股指数 / ETF：腾讯个股历史，前复权对齐主流行情软件。
-        # 只拉最近一段（约 lookback 个交易日 + 预热余量），避免拉全量历史拖慢单次运行：
-        # 全历史约 5000+ 行、单标的耗时 10s+；有界范围仅几百行、耗时 ~1s，
-        # MACD 只看相对变化，预热 120+ 根已足够收敛，不影响信号判定。
-        need = max(index.lookback, 60)
-        start = (dt.date.today() - dt.timedelta(days=need * 2 + 40)).strftime("%Y%m%d")
+        # 只拉最近一段（约 _MIN_BARS 个交易日 + 预热余量），避免拉全量历史拖慢单次运行：
+        # 全历史约 5000+ 行、单标的耗时 10s+；本窗口约几百行、耗时 ~1-2s。
+        # 取 3 年是为让 2 日线（样本减半）也能与东财逐值对齐；日线 120 根即够。
+        need = max(index.lookback, _MIN_BARS)
+        start = (dt.date.today() - dt.timedelta(days=int(need * 1.5) + 40)).strftime("%Y%m%d")
         df = ak.stock_zh_a_hist_tx(
             symbol=symbol, start_date=start, end_date="20500101", adjust="qfq"
         )
@@ -217,7 +224,7 @@ def _get_close_akshare(index: IndexConfig, config: Config) -> pd.Series:
     df = df.dropna(subset=["close"]).copy()
     df["date"] = pd.to_datetime(df["date"])
     df = df.set_index("date").sort_index()
-    return df["close"].astype(float).tail(max(index.lookback, 60))
+    return df["close"].astype(float).tail(max(index.lookback, _MIN_BARS))
 
 
 # ---------- 合成数据（DEMO / 无网络兜底） ----------

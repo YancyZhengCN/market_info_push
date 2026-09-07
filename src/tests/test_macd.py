@@ -49,12 +49,27 @@ def test_period_construction():
     p2 = macd_mod.compute(close, "2d")
     w = macd_mod.compute(close, "weekly")
     assert d.bar is not None
-    assert p2.series.shape[0] == 10, p2.series.shape[0]  # 20 -> 隔行 10
+    # 2 日 K 线：最新一根单独成桶 + 其后每 2 根一桶 → 20 根日线得 1 + ceil(19/2) = 11 根
+    assert p2.series.shape[0] == 11, p2.series.shape[0]
     assert w.series.shape[0] >= 2
     print("PASS test_period_construction")
+
+
+def test_2d_anchored_from_latest():
+    """2 日 K 线从最新一根锚定：末根收盘恒为最新日线收盘，且相位不随行数奇偶漂移。"""
+    for n in (20, 21):  # 覆盖奇偶两种行数
+        close = _make_close(n=n)
+        s2 = macd_mod._prepare(close, "2d")
+        # 末根 2 日 K 线的收盘必须等于最新一根日线收盘（今日单独成桶）
+        assert abs(float(s2.iloc[-1]) - float(close.iloc[-1])) < 1e-9, n
+        assert s2.index[-1] == close.index[-1], n
+        # 倒数第二根覆盖「前 2 个交易日」{-2,-3}，其收盘取较新那天（close.iloc[-2]）
+        assert abs(float(s2.iloc[-2]) - float(close.iloc[-2])) < 1e-9, n
+    print("PASS test_2d_anchored_from_latest")
 
 
 if __name__ == "__main__":
     test_reference_alignment()
     test_period_construction()
+    test_2d_anchored_from_latest()
     print("test_macd OK")
