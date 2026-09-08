@@ -36,9 +36,9 @@ def _process_index(idx: config_mod.IndexConfig, cfg: config_mod.Config, pro) -> 
     """单标的处理：取数 → MACD → 信号。单标的失败返回 MISSING，不阻塞其余。"""
     try:
         close = ts_client.get_close(idx, cfg, pro)
-        d = macd_mod.compute(close, "daily")
-        p2 = macd_mod.compute(close, "2d")
-        w = macd_mod.compute(close, "weekly")
+        d = macd_mod.compute(close, "daily", idx.ts_code)
+        p2 = macd_mod.compute(close, "2d", idx.ts_code)
+        w = macd_mod.compute(close, "weekly", idx.ts_code)
         price = float(close.iloc[-1]) if len(close) else None
         # 当天涨跌幅(%)：(最新收盘 - 前一日收盘) / 前一日收盘 × 100
         pct_change = None

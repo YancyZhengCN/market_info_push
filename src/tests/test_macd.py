@@ -56,7 +56,7 @@ def test_period_construction():
 
 
 def test_2d_anchored_from_latest():
-    """2 日 K 线从最新一根锚定：末根收盘恒为最新日线收盘，且相位不随行数奇偶漂移。"""
+    """无相位锚点（ts_code=None）时回退「末根单独」：末根收盘恒为最新日线收盘，相位不随行数奇偶漂移。"""
     for n in (20, 21):  # 覆盖奇偶两种行数
         close = _make_close(n=n)
         s2 = macd_mod._prepare(close, "2d")
@@ -68,8 +68,36 @@ def test_2d_anchored_from_latest():
     print("PASS test_2d_anchored_from_latest")
 
 
+def test_2d_phase_anchor_pairing():
+    """相位锚点决定末根「配对/单独」，逐日不随行数奇偶漂移，逐值对齐东方财富。"""
+    # 构造一段确定的日频序列，锚点日在序列中部（保证去掉末行后锚点仍在窗口内）
+    dates = pd.bdate_range(end="2026-09-11", periods=44)  # 覆盖锚点日 09-07 及其后若干交易日
+    close = pd.Series(np.arange(len(dates), dtype=float) + 100.0, index=dates)
+    ts = "000300.SH"
+    anchor_date, anchor_parity = macd_mod._2D_PHASE_ANCHOR[ts]
+    assert pd.Timestamp(anchor_date) in close.index  # 锚点须在窗口内
+
+    # 相位随交易日步数翻转：去掉末行（往前 1 个交易日）后配对判定应取反
+    assert macd_mod._last_is_paired(close.iloc[:-1], ts) != macd_mod._last_is_paired(close, ts)
+
+    # 序列末行恰为锚点日时：_last_is_paired 应等于 anchor_parity==1
+    at_anchor = close.loc[:anchor_date]
+    assert macd_mod._last_is_paired(at_anchor, ts) == (anchor_parity == 1)
+
+    # 无锚点标的回退「末根单独」（不配对）
+    assert macd_mod._last_is_paired(close, "UNKNOWN.XX") is False
+
+    # 2d 末根收盘恒为最新日线收盘；末根配对时倒数第二根 = 往前第 3 根（[-3,-4] 组取较新的 -3）
+    s2 = macd_mod._prepare(close, "2d", ts)
+    assert abs(float(s2.iloc[-1]) - float(close.iloc[-1])) < 1e-9
+    if macd_mod._last_is_paired(close, ts):
+        assert abs(float(s2.iloc[-2]) - float(close.iloc[-3])) < 1e-9
+    print("PASS test_2d_phase_anchor_pairing")
+
+
 if __name__ == "__main__":
     test_reference_alignment()
     test_period_construction()
     test_2d_anchored_from_latest()
+    test_2d_phase_anchor_pairing()
     print("test_macd OK")
