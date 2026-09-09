@@ -69,29 +69,37 @@ def test_2d_anchored_from_latest():
 
 
 def test_2d_phase_anchor_pairing():
-    """相位锚点决定末根「配对/单独」，逐日不随行数奇偶漂移，逐值对齐东方财富。"""
-    # 构造一段确定的日频序列，锚点日在序列中部（保证去掉末行后锚点仍在窗口内）
-    dates = pd.bdate_range(end="2026-09-11", periods=44)  # 覆盖锚点日 09-07 及其后若干交易日
+    """全局锚点收盘日决定末根「配对/单独」，逐日随交易日步数翻转，不依赖历史行数。"""
+    # 构造一段确定的日频序列，覆盖锚点收盘日（2025-06-17）到 2026-09 的连续交易日
+    dates = pd.bdate_range(start="2025-06-16", end="2026-09-11")
     close = pd.Series(np.arange(len(dates), dtype=float) + 100.0, index=dates)
-    ts = "000300.SH"
-    anchor_date, anchor_parity = macd_mod._2D_PHASE_ANCHOR[ts]
-    assert pd.Timestamp(anchor_date) in close.index  # 锚点须在窗口内
+    anchor = pd.Timestamp(macd_mod._2D_PHASE_ANCHOR_CLOSE_DAY)
+    assert anchor in close.index  # 锚点须在窗口内
 
-    # 相位随交易日步数翻转：去掉末行（往前 1 个交易日）后配对判定应取反
-    assert macd_mod._last_is_paired(close.iloc[:-1], ts) != macd_mod._last_is_paired(close, ts)
+    # 锚点日是收盘日 → 末行=锚点日时应「单独」(不配对)
+    at_anchor = close.loc[:anchor]
+    assert macd_mod._last_is_paired(at_anchor) is False
 
-    # 序列末行恰为锚点日时：_last_is_paired 应等于 anchor_parity==1
-    at_anchor = close.loc[:anchor_date]
-    assert macd_mod._last_is_paired(at_anchor, ts) == (anchor_parity == 1)
+    # 相位随交易日步数翻转：每往前/后 1 个交易日，配对判定取反
+    assert macd_mod._last_is_paired(close.iloc[:-1]) != macd_mod._last_is_paired(close)
 
-    # 无锚点标的回退「末根单独」（不配对）
-    assert macd_mod._last_is_paired(close, "UNKNOWN.XX") is False
+    # 距锚点偶数交易日 → 单独；奇数 → 配对
+    ai = list(dates).index(anchor)
+    two_after = close.loc[: dates[ai + 2]]
+    assert macd_mod._last_is_paired(two_after) is False
+    one_after = close.loc[: dates[ai + 1]]
+    assert macd_mod._last_is_paired(one_after) is True
+
+    # 非日期索引回退「末根单独」（不配对）
+    assert macd_mod._last_is_paired(close.reset_index(drop=True)) is False
 
     # 2d 末根收盘恒为最新日线收盘；末根配对时倒数第二根 = 往前第 3 根（[-3,-4] 组取较新的 -3）
-    s2 = macd_mod._prepare(close, "2d", ts)
+    s2 = macd_mod._prepare(close, "2d")
     assert abs(float(s2.iloc[-1]) - float(close.iloc[-1])) < 1e-9
-    if macd_mod._last_is_paired(close, ts):
+    if macd_mod._last_is_paired(close):
         assert abs(float(s2.iloc[-2]) - float(close.iloc[-3])) < 1e-9
+    else:
+        assert abs(float(s2.iloc[-2]) - float(close.iloc[-2])) < 1e-9
     print("PASS test_2d_phase_anchor_pairing")
 
 
