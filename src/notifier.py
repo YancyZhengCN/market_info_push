@@ -6,6 +6,8 @@
 - 支持**多个收件人**：SERVERCHAN_SENDKEY 逗号分隔多个 SendKey（每个 key 对应一个微信），
   逐个发送，单个失败不影响其余收件人。
 - PUSH_ENABLED=false 时仅本地打印（dry-run），不联网（requests 懒加载）。
+- 推送**单次发送、失败不重试**：Server酱响应慢时消息常已送达，重试会重复推送
+  （中午高峰偶发两条即此因），故宁可偶尔漏一条也不重复打扰（见 `_post_once`）。
 
 注意：
 - 每个收件人需各自登录 https://sct.ftqq.com/ 关注服务号、拿到自己的 SendKey。
@@ -14,7 +16,6 @@
 from __future__ import annotations
 
 import logging
-import time
 
 from config import Config
 
@@ -61,7 +62,7 @@ def push_markdown(content: str, config: Config) -> dict | None:
     for key in sendkeys:
         masked = key[:8] + "***"  # 日志脱敏，避免泄露完整 SendKey
         try:
-            _post_with_retry(key, title, desp)
+            _post_once(key, title, desp)
             results[masked] = "ok"
             success += 1
         except Exception as e:  # 单个收件人失败不影响其余
@@ -75,22 +76,21 @@ def push_markdown(content: str, config: Config) -> dict | None:
     return {"total": len(sendkeys), "success": success, "results": results}
 
 
-def _post_with_retry(sendkey: str, title: str, desp: str, retries: int = 1) -> dict:
-    """POST 到 Server酱，失败重试（默认 1 次，间隔 5s）；code!=0 视为失败。"""
+def _post_once(sendkey: str, title: str, desp: str) -> dict:
+    """POST 到 Server酱，**单次发送、失败不重试**；code!=0 视为失败并抛异常。
+
+    为何不重试：推送是「已送达但响应慢」比「真失败」更常见的场景——
+    requests 的 timeout 只约束**响应等待**，服务端很可能已把微信消息发出，
+    只是响应未在 timeout 内返回。此时重试会**重复推送**（实测中午高峰偶发两条）。
+    故推送不做重试：宁可偶尔漏一条（每日多轮推送，影响小），也不重复打扰用户。
+    （取数侧仍有重试，见 retry_util；那是幂等读，重试安全。）
+    """
     import requests
 
     url = _SEND_URL_TMPL.format(sendkey=sendkey)
-    last_err: Exception | None = None
-    for attempt in range(retries + 1):
-        try:
-            r = requests.post(url, data={"title": title, "desp": desp}, timeout=10)
-            r.raise_for_status()
-            data = r.json()
-            if data.get("code", 0) == 0:
-                return data
-            raise RuntimeError(f"Server酱推送失败: {data}")
-        except Exception as e:  # 网络异常 / code 非 0
-            last_err = e
-        if attempt < retries:
-            time.sleep(5)
-    raise last_err or RuntimeError("Server酱推送失败（未知错误）")
+    r = requests.post(url, data={"title": title, "desp": desp}, timeout=10)
+    r.raise_for_status()
+    data = r.json()
+    if data.get("code", 0) != 0:
+        raise RuntimeError(f"Server酱推送失败: {data}")
+    return data

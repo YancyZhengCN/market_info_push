@@ -95,8 +95,7 @@ def test_partial_failure_not_block():
         return _Resp({"code": 0})
 
     fake_requests = mock.Mock(post=fake_post)
-    with mock.patch.dict(sys.modules, {"requests": fake_requests}), \
-         mock.patch.object(notifier_mod.time, "sleep"):  # 跳过失败重试的 5s 等待
+    with mock.patch.dict(sys.modules, {"requests": fake_requests}):
         data = notifier_mod.push_markdown("正文", cfg)
 
     assert data["total"] == 2 and data["success"] == 1
@@ -110,8 +109,7 @@ def test_code_nonzero_raises():
 
     fake_requests = mock.Mock(post=fake_post)
     raised = False
-    with mock.patch.dict(sys.modules, {"requests": fake_requests}), \
-         mock.patch.object(notifier_mod.time, "sleep"):  # 跳过失败重试的 5s 等待
+    with mock.patch.dict(sys.modules, {"requests": fake_requests}):
         try:
             notifier_mod.push_markdown("x", _cfg())
         except RuntimeError:
