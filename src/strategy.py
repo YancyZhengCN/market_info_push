@@ -48,7 +48,9 @@ class BullMarketDecision:
     reason: str
     weekly_close_completed: float | None
     ema50: float | None
-    ema50_8w_ago: float | None
+    ema50_slope_reference: float | None  # 斜率回看基准：N 周前的 EMA50（N=slope_lookback_weeks）
+    slope_lookback_weeks: int            # 斜率回看周数（当前生产=12）
+    price_buffer: float                  # 价格缓冲（当前生产=0.00，即只需严格站上 EMA50）
 
 
 @dataclass
@@ -200,10 +202,11 @@ def evaluate_enhanced(close: pd.Series) -> "pd.Series":
 def evaluate_bull_market(close: pd.Series) -> "pd.Series":
     """返回每个交易日的 BullMarketDecision（status = BULL / NON_BULL / UNKNOWN）。
 
-    判定（改造说明「牛市规则」），使用**已完成周收盘**算 EMA50：
-        已完成周收盘 > EMA50 × (1+buffer)  且  当前EMA50 > 8周前EMA50  → BULL
+    判定（牛市规则），使用**已完成周收盘**算 EMA50：
+        已完成周收盘 > EMA50 × (1+buffer)  且  当前EMA50 > N周前EMA50  → BULL
         其余可正常计算的情况                                          → NON_BULL
-        数据不足以算 EMA50 或 8 周斜率                                → UNKNOWN（不得默认非牛市）
+        数据不足以算 EMA50 或 N 周斜率                                → UNKNOWN（不得默认非牛市）
+    参数：buffer=BULL_CLOSE_BUFFER（生产0.00）、N=BULL_SLOPE_LOOKBACK_WEEKS（生产12）。
     与增强版周BAR复用同一“已完成周线”边界。
     """
     span = config_mod.BULL_EMA_WEEKS
@@ -225,41 +228,63 @@ def evaluate_bull_market(close: pd.Series) -> "pd.Series":
     return pd.Series(out, index=close.index, dtype=object)
 
 
+def _classify_bull(
+    latest_close: float | None,
+    latest_ema50: float | None,
+    ema50_slope_reference: float | None,
+    buffer: float,
+    slope: int,
+) -> tuple[str, str]:
+    """牛市状态的纯判定（不依赖 pandas），返回 (status, reason)。
+
+        任一必要值缺失                                         → UNKNOWN
+        已完成周收盘 > EMA50×(1+buffer) 且 EMA50 > N周前EMA50   → BULL
+        否则                                                   → NON_BULL
+    两个比较均为严格大于（等于都不通过）。
+    """
+    if latest_close is None or latest_ema50 is None or ema50_slope_reference is None:
+        return UNKNOWN, f"已完成周线历史不足，无法取得{slope}周前50周EMA"
+    price_ok = latest_close > latest_ema50 * (1 + buffer)
+    slope_ok = latest_ema50 > ema50_slope_reference
+    if price_ok and slope_ok:
+        return BULL, f"已完成周收盘价高于50周EMA，且50周EMA高于{slope}周前，判定为牛市"
+    if not price_ok:
+        return NON_BULL, "已完成周收盘价未严格高于50周EMA，判定为非牛市"
+    return NON_BULL, f"50周EMA未严格高于{slope}周前50周EMA，判定为非牛市"
+
+
 def _bull_from_completed_weekly(
     comp: pd.Series, span: int, slope: int, buffer: float
 ) -> BullMarketDecision:
     """在“已完成周收盘”序列上做一次牛市判定。"""
-    # 需要至少 slope+1 根已完成周线才能取到 8 周前 EMA50；EMA50 本身可在样本不足时被拉偏，
-    # 故要求样本足以覆盖 EMA50 预热与 8 周斜率（min_len）。
+    # 需要至少 slope+1 根已完成周线才能取到 N 周前 EMA50；EMA50 本身可在样本不足时被拉偏，
+    # 故要求样本足以覆盖 EMA50 预热与 N 周斜率（min_len）。
     min_len = slope + 1
     if len(comp) < min_len:
+        status, reason = _classify_bull(None, None, None, buffer, slope)
         return BullMarketDecision(
-            status=UNKNOWN,
-            reason=f"已完成周线不足{min_len}根，无法计算EMA50/{slope}周斜率",
+            status=status,
+            reason=reason,
             weekly_close_completed=None,
             ema50=None,
-            ema50_8w_ago=None,
+            ema50_slope_reference=None,
+            slope_lookback_weeks=slope,
+            price_buffer=buffer,
         )
     ema = comp.ewm(span=span, adjust=False).mean()
     close_now = float(comp.iloc[-1])
     ema_now = float(ema.iloc[-1])
-    ema_prev = float(ema.iloc[-1 - slope])
+    ema_ref = float(ema.iloc[-1 - slope])  # N 周前 EMA50（斜率基准）
 
-    is_bull = close_now > ema_now * (1 + buffer) and ema_now > ema_prev
-    if is_bull:
-        status, reason = BULL, "已完成周收盘>EMA50×(1+buffer)且EMA50上行"
-    else:
-        if not close_now > ema_now * (1 + buffer):
-            reason = "已完成周收盘未严格高于EMA50缓冲线"
-        else:
-            reason = "EMA50未严格高于8周前"
-        status = NON_BULL
+    status, reason = _classify_bull(close_now, ema_now, ema_ref, buffer, slope)
     return BullMarketDecision(
         status=status,
         reason=reason,
         weekly_close_completed=close_now,
         ema50=ema_now,
-        ema50_8w_ago=ema_prev,
+        ema50_slope_reference=ema_ref,
+        slope_lookback_weeks=slope,
+        price_buffer=buffer,
     )
 
 
@@ -321,7 +346,10 @@ def decide_target_position(close: pd.Series) -> TargetPositionDecision:
     """
     if close is None or len(close) == 0:
         empty_enh = EnhancedDecision(EV_ERROR, "无收盘数据", None, None, None, None, None)
-        empty_bull = BullMarketDecision(UNKNOWN, "无收盘数据", None, None, None)
+        empty_bull = BullMarketDecision(
+            UNKNOWN, "无收盘数据", None, None, None,
+            config_mod.BULL_SLOPE_LOOKBACK_WEEKS, config_mod.BULL_CLOSE_BUFFER,
+        )
         return TargetPositionDecision(UNKNOWN, "无收盘数据", empty_bull, empty_enh)
 
     enhanced = evaluate_enhanced(close)

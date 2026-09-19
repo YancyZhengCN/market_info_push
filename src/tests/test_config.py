@@ -72,10 +72,19 @@ def test_indices_json_roles():
     print("PASS test_indices_json_roles")
 
 
+def test_bull_strategy_defaults():
+    """生产默认牛市参数：EMA周期=50、价格缓冲=0.00、斜率回看=12。"""
+    assert config_mod.BULL_EMA_WEEKS == 50
+    assert config_mod.BULL_CLOSE_BUFFER == 0.00
+    assert config_mod.BULL_SLOPE_LOOKBACK_WEEKS == 12
+    print("PASS test_bull_strategy_defaults")
+
+
 if __name__ == "__main__":
     test_infer_api_by_ts_code()
     test_explicit_api_wins()
     test_invalid_api_raises()
     test_role_default_and_validate()
     test_indices_json_roles()
+    test_bull_strategy_defaults()
     print("test_config OK")

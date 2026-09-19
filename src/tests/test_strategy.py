@@ -129,6 +129,36 @@ def test_enhanced_decision_fields_present():
 # ---------------------------------------------------------------------------
 # 牛市判定
 # ---------------------------------------------------------------------------
+def test_bull_classify_matrix():
+    """纯判定 _classify_bull 覆盖牛市条件调整说明的精确取值用例（buffer=0, slope=12）。"""
+    c = st._classify_bull
+    B, S = 0.00, 12
+    # 正常牛市：101 > 100 且 100 > 99
+    assert c(101, 100, 99, B, S)[0] == st.BULL
+    # 取消 2% 缓冲：旧规则 101<=102 非牛市，新规则（buffer=0）应为牛市
+    assert c(101, 100, 99, B, S)[0] == st.BULL
+    # 收盘等于 EMA → 价格条件不通过（严格大于）→ NON_BULL
+    assert c(100, 100, 99, B, S)[0] == st.NON_BULL
+    # EMA 斜率走平（100 == 100）→ NON_BULL
+    assert c(101, 100, 100, B, S)[0] == st.NON_BULL
+    # EMA 斜率向下（100 < 101）→ NON_BULL
+    assert c(101, 100, 101, B, S)[0] == st.NON_BULL
+    # 必要值缺失 → UNKNOWN（不得 NON_BULL）
+    assert c(101, 100, None, B, S)[0] == st.UNKNOWN
+    assert c(None, 100, 99, B, S)[0] == st.UNKNOWN
+    print("PASS test_bull_classify_matrix")
+
+
+def test_bull_old_rule_via_buffer():
+    """回滚等价：buffer=0.02、slope=8 时恢复旧规则语义。"""
+    c = st._classify_bull
+    # 101 vs 100×1.02=102 → 价格不通过 → NON_BULL（旧规则）
+    assert c(101, 100, 99, 0.02, 8)[0] == st.NON_BULL
+    # 103 > 102 且 100 > 99 → BULL
+    assert c(103, 100, 99, 0.02, 8)[0] == st.BULL
+    print("PASS test_bull_old_rule_via_buffer")
+
+
 def test_bull_unknown_when_history_insufficient():
     # 已完成周线不足 slope+1 根 → UNKNOWN（不得默认非牛市）
     close = pd.Series(np.linspace(100, 110, 20), index=pd.bdate_range("2026-01-01", periods=20))
@@ -136,18 +166,19 @@ def test_bull_unknown_when_history_insufficient():
 
 
 def test_bull_true_on_strong_uptrend():
-    # 长期强上行：末日已完成周收盘远高于 EMA50 缓冲线且 EMA50 上行 → BULL
+    # 长期强上行：末日已完成周收盘高于 EMA50 且 EMA50 上行 → BULL
     n = 500
     dates = pd.bdate_range(end="2026-09-18", periods=n)
     close = pd.Series(np.linspace(100, 300, n), index=dates)
     dec = st.evaluate_bull_market(close).iloc[-1]
     assert dec.status == st.BULL
-    assert dec.ema50 is not None and dec.ema50_8w_ago is not None
-    assert dec.weekly_close_completed > dec.ema50 * 1.02
+    assert dec.ema50 is not None and dec.ema50_slope_reference is not None
+    assert dec.weekly_close_completed > dec.ema50  # buffer=0，只需严格站上 EMA50
+    assert dec.slope_lookback_weeks == 12 and dec.price_buffer == 0.00
 
 
 def test_bull_false_on_downtrend():
-    # 长期下行：周收盘低于 EMA50 缓冲线 → NON_BULL
+    # 长期下行：周收盘低于 EMA50 → NON_BULL
     n = 500
     dates = pd.bdate_range(end="2026-09-18", periods=n)
     close = pd.Series(np.linspace(300, 100, n), index=dates)
@@ -155,7 +186,7 @@ def test_bull_false_on_downtrend():
 
 
 def test_bull_boundary_strict_gt():
-    # 常数序列：周收盘 == EMA50（buffer 后更高），且 EMA50 无斜率 → NON_BULL（严格大于）
+    # 常数序列：周收盘 == EMA50 且 EMA50 无斜率 → NON_BULL（严格大于）
     n = 500
     dates = pd.bdate_range(end="2026-09-18", periods=n)
     close = pd.Series(np.full(n, 100.0), index=dates)

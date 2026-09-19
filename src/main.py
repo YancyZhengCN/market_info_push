@@ -108,12 +108,13 @@ def _log_strategy(idx: config_mod.IndexConfig, date_str: str, decision) -> None:
     logger.info(
         "[策略] %s %s | 增强版事件=%s 目标仓位=%s 牛市=%s | "
         "ΔBAR2D=%s σ20=%s 0.4σ20=%s 已完成周BAR=%s 前一已完成周BAR=%s | "
-        "已完成周收盘=%s EMA50=%s 8周前EMA50=%s | 原因: %s / %s",
+        "已完成周收盘=%s EMA50=%s %d周前EMA50=%s | 原因: %s / %s",
         idx.name, date_str,
         enh.event, decision.state, bull.status,
         _f(enh.delta_bar_2d), _f(enh.sigma20), _f(enh.threshold),
         _f(enh.weekly_bar_completed), _f(enh.weekly_bar_completed_prev),
-        _f(bull.weekly_close_completed), _f(bull.ema50), _f(bull.ema50_8w_ago),
+        _f(bull.weekly_close_completed), _f(bull.ema50),
+        bull.slope_lookback_weeks, _f(bull.ema50_slope_reference),
         decision.reason, bull.reason,
     )
 

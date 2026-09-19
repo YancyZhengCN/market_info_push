@@ -23,10 +23,12 @@ class ConfigError(Exception):
 
 
 # ---------- 牛市增强目标仓位策略参数（六个目标仓位标的统一使用，不为单标的单独调参） ----------
-# 牛市判定：已完成周收盘 > 50周EMA × (1+0.02) 且 当前50周EMA > 8周前50周EMA
+# 牛市判定：已完成周收盘 > 50周EMA × (1+缓冲) 且 当前50周EMA > N周前50周EMA
+# 参数网格与联合参数优化后选用 50周 + 0%缓冲 + 12周斜率（详见 牛市条件调整说明）。
+# 回滚旧规则：把 BULL_CLOSE_BUFFER 改回 0.02、BULL_SLOPE_LOOKBACK_WEEKS 改回 8 即可。
 BULL_EMA_WEEKS = 50            # 牛市 EMA 的周跨度（EMA50，用已完成周收盘）
-BULL_SLOPE_LOOKBACK_WEEKS = 8  # EMA50 斜率回看周数（当前 EMA50 与 8 周前比较）
-BULL_CLOSE_BUFFER = 0.02       # 周收盘相对 EMA50 的缓冲阈值（严格大于才算牛市）
+BULL_SLOPE_LOOKBACK_WEEKS = 12  # EMA50 斜率回看周数（当前 EMA50 与 12 周前比较）
+BULL_CLOSE_BUFFER = 0.00       # 周收盘相对 EMA50 的缓冲阈值（0=只需严格站上 EMA50，无额外缓冲）
 
 # 增强版：ΔBAR₂D 与 0.4×σ20 动态阈值 + 已完成周 BAR 未恶化
 ENHANCED_SIGMA_WINDOW = 20       # σ20 滚动窗口（最近 20 个交易日的 ΔBAR₂D 快照）
