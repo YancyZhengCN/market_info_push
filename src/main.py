@@ -33,16 +33,17 @@ def setup_logging(level: str) -> None:
     )
 
 
-def _process_index(idx: config_mod.IndexConfig, cfg: config_mod.Config, pro) -> signal_mod.Signal:
+def _process_index(idx: config_mod.IndexConfig, cfg: config_mod.Config, pro, today_is_trading: bool = True) -> signal_mod.Signal:
     """单标的处理：取数 → MACD →（目标仓位标的再跑策略）→ 信号。
 
     - 观察标的（role=observe）：沿用原路径，仅展示价格与日/2日/周MACD。
     - 目标仓位标的（role=target）：额外计算增强版事件、牛市状态并按历史重放目标仓位，
       分组以 target_position 为准（不再用当日 MACD 柱变化直接判买卖）。
+    - today_is_trading=False（非交易日强跑预览）：取数层不拼接实时价，直接用上一交易日收盘。
     单标的失败返回 MISSING（target→未触发 / observe→观察失败），不阻塞其余。
     """
     try:
-        close = ts_client.get_close(idx, cfg, pro)
+        close = ts_client.get_close(idx, cfg, pro, today_is_trading)
         d = macd_mod.compute(close, "daily", idx.ts_code)
         p2 = macd_mod.compute(close, "2d", idx.ts_code)
         w = macd_mod.compute(close, "weekly", idx.ts_code)
@@ -124,11 +125,15 @@ def run(cfg: config_mod.Config) -> int:
 
     # 交易日过滤（演示模式 / FORCE_RUN 跳过，便于任意日期预览与调试）
     force_run = os.getenv("FORCE_RUN", "false").lower() == "true"
-    if not cfg.demo and not force_run and not ts_client.is_trading_day(today, cfg.tushare_token, cfg.data_source):
+    today_is_trading = cfg.demo or ts_client.is_trading_day(today, cfg.tushare_token, cfg.data_source)
+    if not cfg.demo and not force_run and not today_is_trading:
         logger.info("非交易日，跳过推送")
         return 0
     if force_run:
         logger.info("FORCE_RUN=true，跳过交易日判断")
+    if not today_is_trading:
+        # 非交易日强跑（FORCE_RUN 预览）：不拼接实时价，用上一交易日收盘
+        logger.info("今天非交易日：数据使用上一交易日收盘（不拼接实时价）")
 
     pro = None
     if cfg.data_source == "tushare" and cfg.tushare_token and not cfg.demo:
@@ -137,7 +142,7 @@ def run(cfg: config_mod.Config) -> int:
     # 并发拉取各标的；用 map 保序，输出顺序与 indices 一致
     workers = min(_MAX_WORKERS, max(len(cfg.indices), 1))
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        results = list(pool.map(lambda idx: _process_index(idx, cfg, pro), cfg.indices))
+        results = list(pool.map(lambda idx: _process_index(idx, cfg, pro, today_is_trading), cfg.indices))
 
     content = templates_mod.render(results, date_str)
     notifier_mod.push_markdown(content, cfg)

@@ -40,7 +40,12 @@ def _pro(token: str):
 
 
 def is_trading_day(date: dt.date, token: Optional[str] = None, data_source: str = "tushare") -> bool:
-    """优先用 Tushare trade_cal 判定；否则退化为"仅工作日"判断。"""
+    """判定是否 A 股交易日。
+
+    - tushare + token：用 Tushare trade_cal（最准）。
+    - 否则（akshare / 无 token）：用 akshare `tool_trade_date_hist_sina`（新浪，含法定节假日，免 token）。
+    - 交易日历取不到（网络/接口异常）：退化为"仅工作日"判断（识别周末，但不识别节假日）。
+    """
     if data_source == "tushare" and token:
         try:
             pro = _pro(token)
@@ -50,10 +55,29 @@ def is_trading_day(date: dt.date, token: Optional[str] = None, data_source: str 
             return False
         except Exception:
             pass
+    else:
+        # 无 token：优先用 akshare 交易日历（含节假日）；失败再退化到仅工作日
+        trading = _akshare_is_trading_day(date)
+        if trading is not None:
+            return trading
     return date.weekday() < 5
 
 
-def get_close(index: IndexConfig, config: Config, pro=None) -> pd.Series:
+def _akshare_is_trading_day(date: dt.date) -> Optional[bool]:
+    """用 akshare 交易日历判断是否 A 股交易日；接口不可用/异常时返回 None（由上层退化处理）。"""
+    try:
+        import akshare as ak
+
+        df = ak.tool_trade_date_hist_sina()
+        if df is None or df.empty or "trade_date" not in df.columns:
+            return None
+        days = set(pd.to_datetime(df["trade_date"]).dt.date)
+        return date in days
+    except Exception:
+        return None
+
+
+def get_close(index: IndexConfig, config: Config, pro=None, today_is_trading: bool = True) -> pd.Series:
     # DEMO：确定性合成数据，无需联网
     if config.demo:
         return _synthetic_close(index.ts_code, index.lookback)
@@ -61,12 +85,12 @@ def get_close(index: IndexConfig, config: Config, pro=None) -> pd.Series:
     source = (config.data_source or "tushare").lower()
     if source == "akshare":
         close = _get_close_akshare_retry(index, config)
-        return _maybe_append_spot(close, index, config)
+        return _maybe_append_spot(close, index, config, today_is_trading)
     if source == "tushare":
         if not config.tushare_token:
             # 无 token 自动降级到 AkShare（东方财富，免 token）
             close = _get_close_akshare_retry(index, config)
-            return _maybe_append_spot(close, index, config)
+            return _maybe_append_spot(close, index, config, today_is_trading)
         return _get_close_tushare(index, config, pro)
 
     raise ValueError(f"未知数据源: {source}")
@@ -82,17 +106,25 @@ def _get_close_akshare_retry(index: IndexConfig, config: Config) -> pd.Series:
     )
 
 
-def _maybe_append_spot(close: pd.Series, index: IndexConfig, config: Config) -> pd.Series:
+def _maybe_append_spot(
+    close: pd.Series, index: IndexConfig, config: Config, today_is_trading: bool = True
+) -> pd.Series:
     """盘中把实时价作为「当天临时收盘价」拼接到日线序列末尾，算动态 MACD。
 
     - config.realtime_intraday 关闭：直接用日线（用户主动选择日线口径，不算误导）。
+    - **今天不是交易日**（周末 / 法定节假日，或 FORCE_RUN 在非交易日强跑）：不拼接实时价，
+      直接用序列现有末行（即上一交易日的真实收盘）。非交易日没有当天行情，硬取"实时价"只会
+      拿到上一交易日残值或脏数据，反而污染价格与 MACD；故非交易日一律用上一交易日收盘。
     - 序列末行日期 >= 今天（当天日 K 已生成）：无需拼接，直接返回。
-    - 序列末行 < 今天（盘中，当天日 K 未生成）：**必须**拿到实时价拼接；
+    - 序列末行 < 今天（交易日盘中，当天日 K 未生成）：**必须**拿到实时价拼接；
       若实时价取不到（重试后仍失败 / 无实时源），则**抛异常**让该标的标记 MISSING，
       **绝不回退显示上一交易日日线**——否则用户会误以为是今天的数据。
     实时价用今天作为索引追加；若已有今天则替换。
     """
     if not getattr(config, "realtime_intraday", True):
+        return close
+    if not today_is_trading:
+        # 非交易日：用上一交易日真实收盘，不拼接实时价
         return close
     if close is None or len(close) == 0 or not isinstance(close.index, pd.DatetimeIndex):
         return close

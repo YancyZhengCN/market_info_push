@@ -352,3 +352,12 @@
 - `build_signal` 只**透传**策略层算好的 `target_position`，模板层只读不重算——策略/装配/展示三层职责不重叠，便于独立测试。
 - 测试：`tests/test_strategy.py`（增强/牛市/重放全分支 + 纯判定 `_classify_enhanced_event` 矩阵）、
   `tests/test_render.py::test_golden_20260918`（2026-09-18 线上页面黄金样例，锁列顺序/括号/箭头/粗体/分组）。
+
+### 13.6 非交易日必须用上一交易日收盘，且节假日要靠交易日历识别
+
+- **坑**：`_maybe_append_spot` 见"末行<今天"就去取实时价拼成当天 K。非交易日（周末/节假日）没有当天行情，
+  硬取只会拿到脏值/上一交易日残值，污染价格与 MACD。修复：`run()` 把 `today_is_trading` 算一次传到取数层，
+  非交易日**直接用序列末行（上一交易日真实收盘），不拼接实时价**。
+- 节假日识别：无 token 时 `is_trading_day` 改用 akshare `tool_trade_date_hist_sina`（含法定节假日，免 token），
+  接口异常再退化为"仅判周末"。该日历约 8797 行、全量拉取，故只在 `run()` 调一次，不要放进逐标的循环。
+- 已加 `basis` 无关：本修复不动 basis；卡片自 v0.2 起已不再按 basis 高亮列（basis 字段保留待用）。

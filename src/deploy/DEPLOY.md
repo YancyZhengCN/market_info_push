@@ -123,10 +123,13 @@ bash deploy/build_package.sh
 
 ## 6. 交易日历说明（akshare 场景）
 
-`is_trading_day` 在无 Tushare token 时**退化为「仅判断是否工作日」**（周一至周五即视为交易日），
-**不识别法定节假日**。这意味着：**国庆/春节等节假日，若 `PUSH_ENABLED=true` 仍会推送一条**
-（数据为节前最后交易日的值）。若要精确跳过法定节假日，需接入交易日历（配 Tushare token 或
-用 akshare 的 `tool_trade_date_hist_sina`）。当前实现的取舍已记录在 experience.md。
+`is_trading_day` 在无 Tushare token 时使用 **akshare `tool_trade_date_hist_sina`**（新浪 A 股交易日历，
+含法定节假日，免 token）判断是否交易日：**周末与国庆/春节等法定节假日都会被正确识别为非交易日**，
+`PUSH_ENABLED=true` 时也不会在这些日子误推。仅当该日历接口异常取不到时，才退化为「仅判断是否工作日」
+（识别周末，但不识别节假日）。
+
+此外，**非交易日即便被强制运行（FORCE_RUN 预览）也不会拼接实时价**，而是直接用上一交易日的真实收盘，
+避免用非交易日的脏实时价污染价格与 MACD。
 
 ---
 
