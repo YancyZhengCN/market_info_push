@@ -1,13 +1,21 @@
 # 指数 MACD 买卖信号推送
 
-按日频 MACD 柱（BAR）的日间变化，对一组指数 / ETF 生成买卖信号，渲染成 Markdown 日报并通过 Server酱推送到个人微信。支持本地运行与云函数入口。
+对一组指数 / ETF 计算**当前目标仓位**（牛市持有 + 非牛市 MACD 增强版），渲染成 Markdown 日报并通过 Server酱推送到个人微信。支持本地运行与云函数入口。
+
+> **目标仓位语义（重要）**：卡片里的「今日买入信号」= 当前**应该持仓**，「今日卖出信号」= 当前**不应该持仓**——表示"现在该不该拿"，**不是**"今天刚买/刚卖"。详见 `market_info_push_牛市增强目标仓位改造说明.md` 与产品/技术方案的 v0.2 章节。
 
 ## 功能概览
 
-- **多标的监控**：标的清单外置于 `indices.json`，增删标的只改该文件。
+- **多标的监控**：标的清单外置于 `indices.json`，增删标的只改该文件。每个标的用 `role` 区分：
+  - `target`（目标仓位标的，6 个）：参与牛市判断与增强版目标仓位重放，进买入/卖出/未触发分组。
+  - `observe`（观察标的：黄金9999、十年期国债ETF）：只展示价格与日/2日/周 MACD，不参与策略。
 - **双数据源**：`tushare`（需 token）/ `akshare`（新浪·腾讯源，免 token），另有 `DEMO` 合成数据离线兜底。
-- **三周期 MACD**：日线（daily）/ 2日（隔行取样）/ 周线（W-FRI 重采样）。
-- **信号规则**：按各标的配置的判定周期（`basis`：日/2日/周）的 MACD 柱较上一周期 **变多 → 买入**、**变少 → 卖出**、持平 → 未触发；其余周期并列展示，推送表格中对判定所依据的那一列加粗高亮。
+- **三周期 MACD**：日线（daily）/ 2日（隔行取样，全局相位锚点）/ 周线（W-FRI 重采样）。
+- **牛市增强目标仓位策略**（`strategy.py`）：
+  - **增强版事件**：`ΔBAR₂D<0 → SELL`；`已完成周BAR未恶化 且 ΔBAR₂D>0.4×σ20 → BUY`；否则 `HOLD`；数据缺失 `ERROR`。
+  - **牛市判定**：`已完成周收盘 > EMA50×1.02 且 EMA50 > 8周前EMA50 → 牛市`；历史不足 → `UNKNOWN`。
+  - **目标仓位历史重放**：牛市固定持仓；非牛市按事件更新、HOLD 继承；输出 `TARGET_HOLD/TARGET_CASH/UNKNOWN`。
+- **卡片**：🔴 今日买入信号（当前应持仓）/ 🟢 今日卖出信号（当前应空仓），买卖表在 `标的` 后带 `牛市` 列（`✅/❌`）；观察指标单独成表；仅在失败时显示「未触发」。判定所依据的周期列加粗高亮。
 - **推送**：**Server酱³**（`sctapi.ftqq.com`）推送到个人微信，免确认、实时、支持 markdown。`PUSH_ENABLED=false` 时仅本地打印（dry-run），不联网。
 
 ## 目录结构
@@ -15,16 +23,17 @@
 ```
 src/
 ├── main.py            # 编排入口（本地 __main__ / 云函数 main_handler）
-├── config.py          # 环境变量 + indices.json 加载与校验
+├── config.py          # 环境变量 + indices.json 加载与校验（含 role 与 BULL_/ENHANCED_ 参数）
 ├── tushare_client.py  # 取数层：tushare / akshare(新浪·腾讯) / 合成数据
-├── macd.py            # MACD 计算（EMA12/26 → DIF/DEA → BAR）
-├── signals.py         # 信号判定（BUY/SELL/HOLD/MISSING）
-├── templates.py       # Markdown 日报渲染
+├── macd.py            # MACD 计算（EMA12/26 → DIF/DEA → BAR）+ 已完成周线公共函数
+├── strategy.py        # 牛市增强目标仓位：增强版事件 / 牛市判定 / 目标仓位历史重放
+├── signals.py         # 信号装配（承载 target_position / bull_status）
+├── templates.py       # Markdown 日报渲染（🔴买入/🟢卖出 + 牛市列 + 观察表）
 ├── notifier.py        # 企业微信推送（含 dry-run）
-├── indices.json       # 监控标的清单
+├── indices.json       # 监控标的清单（含 role）
 ├── requirements.txt   # 依赖
 ├── .env.example       # 环境变量样例
-└── tests/             # 单元测试
+└── tests/             # 单元测试（含 test_strategy.py 与 9-18 黄金样例）
 ```
 
 ## 快速开始

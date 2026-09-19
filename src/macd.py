@@ -104,18 +104,69 @@ def _prepare(close: pd.Series, period: str, ts_code: str | None = None) -> pd.Se
     if period == "2d":
         s = _resample_2d(s, ts_code)
     elif period == "weekly":
-        s = s.resample("W-FRI").last().dropna()
+        s = weekly_close_full(s)
     return s
+
+
+# ---------- 已完成周线（策略层复用：增强版周BAR + 牛市EMA50 共用同一边界） ----------
+_WEEKLY_RULE = "W-FRI"
+
+
+def weekly_close_full(close: pd.Series) -> pd.Series:
+    """全部 W-FRI 周收盘（含正在形成的本周）。卡片展示的周MACD沿用此口径，保持线上现状不变。"""
+    s = close.sort_index() if isinstance(close.index, pd.DatetimeIndex) else close
+    return s.resample(_WEEKLY_RULE).last().dropna()
+
+
+def week_end(ts: pd.Timestamp) -> pd.Timestamp:
+    """返回 ts 所属 W-FRI 周的右边界（周五）：即 >= ts 的最近一个周五（与 resample('W-FRI') 桶标签一致）。
+
+    周六/周日归入下一个周五的桶，与 pandas W-FRI 语义一致。
+    """
+    ts = pd.Timestamp(ts).normalize()
+    days_ahead = (4 - ts.weekday()) % 7  # 周一=0 … 周五=4；结果为到本/下一个周五的天数
+    return ts + pd.Timedelta(days=days_ahead)
+
+
+def completed_weekly_close(close: pd.Series) -> pd.Series:
+    """已完成周收盘：在 `weekly_close_full` 基础上剔除“正在形成的本周”。
+
+    正在形成的本周 = 序列最后一个交易日所属的 W-FRI 周（其右边界周五尚未确认收盘）。
+    这是策略层“已完成周线”的**唯一**判定入口：增强版的已完成周BAR、牛市的EMA50/8周斜率
+    都必须复用此边界，避免用正在形成的本周周BAR提前放行买入或改变牛市状态。
+
+    生产环境每个交易日都会把当天（实时价）拼进日线，故序列末日=当天，本周即被剔除、
+    上一整周作为最近一根已完成周线；不另建日期猜测逻辑（见改造说明“已完成周线”）。
+    """
+    weekly = weekly_close_full(close)
+    if len(weekly) == 0 or not isinstance(close.index, pd.DatetimeIndex) or len(close) == 0:
+        return weekly
+    forming_end = week_end(close.index[-1])
+    # 只保留“本周之前”的周（严格早于正在形成的本周右边界）
+    return weekly[weekly.index < forming_end]
 
 
 def macd_series(close: pd.Series, period: str = "daily", ts_code: str | None = None) -> pd.DataFrame:
     s = _prepare(close, period, ts_code)
+    return bar_frame(s)
+
+
+def bar_frame(s: pd.Series) -> pd.DataFrame:
+    """在**已准备好**的收盘序列上直接算 MACD（不再做周期重采样）。
+
+    供策略层复用同一套 12/26/9 口径：如在“已完成周收盘”序列上算周BAR、在任意序列上算 BAR。
+    """
     ewma12 = s.ewm(span=FAST, adjust=False).mean()
     ewma26 = s.ewm(span=SLOW, adjust=False).mean()
     dif = ewma12 - ewma26
     dea = dif.ewm(span=SIGNAL, adjust=False).mean()
     bar = (dif - dea) * 2
     return pd.DataFrame({"dif": dif, "dea": dea, "bar": bar}, index=s.index)
+
+
+def bar_series(s: pd.Series) -> pd.Series:
+    """在已准备好的序列上算 MACD 柱(BAR)，只返回 bar 列。"""
+    return bar_frame(s)["bar"]
 
 
 def compute(close: pd.Series, period: str = "daily", ts_code: str | None = None) -> MACDResult:

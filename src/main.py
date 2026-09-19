@@ -15,6 +15,7 @@ import config as config_mod
 import macd as macd_mod
 import notifier as notifier_mod
 import signals as signal_mod
+import strategy as strategy_mod
 import templates as templates_mod
 import tushare_client as ts_client
 
@@ -33,7 +34,13 @@ def setup_logging(level: str) -> None:
 
 
 def _process_index(idx: config_mod.IndexConfig, cfg: config_mod.Config, pro) -> signal_mod.Signal:
-    """单标的处理：取数 → MACD → 信号。单标的失败返回 MISSING，不阻塞其余。"""
+    """单标的处理：取数 → MACD →（目标仓位标的再跑策略）→ 信号。
+
+    - 观察标的（role=observe）：沿用原路径，仅展示价格与日/2日/周MACD。
+    - 目标仓位标的（role=target）：额外计算增强版事件、牛市状态并按历史重放目标仓位，
+      分组以 target_position 为准（不再用当日 MACD 柱变化直接判买卖）。
+    单标的失败返回 MISSING（target→未触发 / observe→观察失败），不阻塞其余。
+    """
     try:
         close = ts_client.get_close(idx, cfg, pro)
         d = macd_mod.compute(close, "daily", idx.ts_code)
@@ -46,11 +53,31 @@ def _process_index(idx: config_mod.IndexConfig, cfg: config_mod.Config, pro) -> 
             prev_close = float(close.iloc[-2])
             if prev_close:
                 pct_change = (float(close.iloc[-1]) - prev_close) / prev_close * 100
-        sig = signal_mod.build_signal(idx.name, idx.ts_code, d, p2, w, price, idx.basis, pct_change)
+
+        # 目标仓位标的：跑牛市增强策略并按历史重放目标仓位
+        bull_status = target_position = strategy_reason = bull_reason = ""
+        if idx.is_target:
+            decision = strategy_mod.decide_target_position(close)
+            bull_status = decision.bull.status
+            target_position = decision.state
+            strategy_reason = decision.reason
+            bull_reason = decision.bull.reason
+            _log_strategy(idx, date_of(close), decision)
+
+        sig = signal_mod.build_signal(
+            idx.name, idx.ts_code, d, p2, w, price, idx.basis, pct_change,
+            role=idx.role,
+            bull_status=bull_status,
+            target_position=target_position,
+            strategy_reason=strategy_reason,
+            bull_reason=bull_reason,
+        )
         logger.info(
-            "标的 %s → %s (判定周期 %s | 日BAR %.4f / 前1日 %.4f)",
+            "标的 %s → status=%s target=%s bull=%s (判定周期 %s | 日BAR %.4f / 前1日 %.4f)",
             idx.name,
             sig.status,
+            target_position or "-",
+            bull_status or "-",
             idx.basis,
             d.bar if d.bar is not None else float("nan"),
             d.bar_prev if d.bar_prev is not None else float("nan"),
@@ -58,7 +85,36 @@ def _process_index(idx: config_mod.IndexConfig, cfg: config_mod.Config, pro) -> 
         return sig
     except Exception as e:  # 单标的失败不阻塞其余
         logger.error("标的 %s 处理失败: %s", idx.name, e)
-        return signal_mod.missing_signal(idx.name, idx.ts_code, idx.basis)
+        return signal_mod.missing_signal(idx.name, idx.ts_code, idx.basis, role=idx.role)
+
+
+def date_of(close) -> str:
+    """取收盘序列末日字符串，仅用于日志。"""
+    try:
+        return close.index[-1].strftime("%Y-%m-%d")
+    except Exception:
+        return "-"
+
+
+def _log_strategy(idx: config_mod.IndexConfig, date_str: str, decision) -> None:
+    """记录目标仓位标的的策略明细（用于解释分组，不进入微信表格）。"""
+    enh = decision.enhanced
+    bull = decision.bull
+
+    def _f(x):
+        return f"{x:.4f}" if isinstance(x, (int, float)) else "NA"
+
+    logger.info(
+        "[策略] %s %s | 增强版事件=%s 目标仓位=%s 牛市=%s | "
+        "ΔBAR2D=%s σ20=%s 0.4σ20=%s 已完成周BAR=%s 前一已完成周BAR=%s | "
+        "已完成周收盘=%s EMA50=%s 8周前EMA50=%s | 原因: %s / %s",
+        idx.name, date_str,
+        enh.event, decision.state, bull.status,
+        _f(enh.delta_bar_2d), _f(enh.sigma20), _f(enh.threshold),
+        _f(enh.weekly_bar_completed), _f(enh.weekly_bar_completed_prev),
+        _f(bull.weekly_close_completed), _f(bull.ema50), _f(bull.ema50_8w_ago),
+        decision.reason, bull.reason,
+    )
 
 
 def run(cfg: config_mod.Config) -> int:

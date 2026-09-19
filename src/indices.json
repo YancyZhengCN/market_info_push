@@ -1,10 +1,10 @@
 [
-  { "name": "沪深300",      "ts_code": "000300.SH", "basis": "2d"  },
-  { "name": "科创50",       "ts_code": "000688.SH", "basis": "2d"  },
-  { "name": "创业板50",     "ts_code": "399673.SZ", "basis": "2d"  },
-  { "name": "恒生科技",     "ts_code": "HKTECH",    "basis": "2d"  },
-  { "name": "十年期国债ETF", "ts_code": "511260.SH", "basis": "daily" },
-  { "name": "港股创新药ETF", "ts_code": "513120.SH", "basis": "2d"  },
-  { "name": "北证50",       "ts_code": "899050.BJ", "basis": "2d"     },
-  { "name": "黄金9999",     "ts_code": "AU9999",     "basis": "2d"  }
+  { "name": "沪深300",      "ts_code": "000300.SH", "basis": "2d",  "role": "target"  },
+  { "name": "科创50",       "ts_code": "000688.SH", "basis": "2d",  "role": "target"  },
+  { "name": "创业板50",     "ts_code": "399673.SZ", "basis": "2d",  "role": "target"  },
+  { "name": "恒生科技",     "ts_code": "HKTECH",    "basis": "2d",  "role": "target"  },
+  { "name": "北证50",       "ts_code": "899050.BJ", "basis": "2d",  "role": "target"  },
+  { "name": "港股创新药ETF", "ts_code": "513120.SH", "basis": "2d",  "role": "target"  },
+  { "name": "十年期国债ETF", "ts_code": "511260.SH", "basis": "daily", "role": "observe" },
+  { "name": "黄金9999",     "ts_code": "AU9999",     "basis": "2d",  "role": "observe" }
 ]

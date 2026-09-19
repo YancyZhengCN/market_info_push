@@ -103,9 +103,27 @@ def test_2d_phase_anchor_pairing():
     print("PASS test_2d_phase_anchor_pairing")
 
 
+def test_completed_weekly_excludes_forming_week():
+    """已完成周线剔除“正在形成的本周”：末日所属 W-FRI 周被排除，且与 full 周线只差这一根。"""
+    # 末日为周四 → 本周（周五）尚未完成，应被剔除
+    dates = pd.bdate_range(end="2026-09-17", periods=80)  # 2026-09-17 是周四
+    close = pd.Series(np.arange(len(dates), dtype=float) + 100.0, index=dates)
+    full = macd_mod.weekly_close_full(close)
+    comp = macd_mod.completed_weekly_close(close)
+    assert len(full) - len(comp) == 1, (len(full), len(comp))
+    # 已完成周线的末根标签严格早于本周右边界
+    forming_end = macd_mod.week_end(dates[-1])
+    assert comp.index[-1] < forming_end
+    # 展示用周MACD仍走 full（含本周），保持线上现状：_prepare('weekly') == weekly_close_full
+    disp = macd_mod._prepare(close, "weekly")
+    assert list(disp.index) == list(full.index)
+    print("PASS test_completed_weekly_excludes_forming_week")
+
+
 if __name__ == "__main__":
     test_reference_alignment()
     test_period_construction()
     test_2d_anchored_from_latest()
     test_2d_phase_anchor_pairing()
+    test_completed_weekly_excludes_forming_week()
     print("test_macd OK")

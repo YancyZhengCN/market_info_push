@@ -44,8 +44,38 @@ def test_invalid_api_raises():
     print("PASS test_invalid_api_raises")
 
 
+def test_role_default_and_validate():
+    """role 默认 target；非法 role 校验抛错；observe 合法。"""
+    idx = config_mod.IndexConfig(name="x", ts_code="000300.SH")
+    assert idx.role == "target" and idx.is_target is True
+    obs = config_mod.IndexConfig(name="金", ts_code="AU9999", role="observe")
+    assert obs.is_target is False
+    obs.validate()  # 合法
+    bad = config_mod.IndexConfig(name="x", ts_code="000300.SH", role="bogus")
+    raised = False
+    try:
+        bad.validate()
+    except config_mod.ConfigError:
+        raised = True
+    assert raised
+    print("PASS test_role_default_and_validate")
+
+
+def test_indices_json_roles():
+    """项目 indices.json：六个目标标的为 target，国债ETF/黄金为 observe。"""
+    indices = config_mod.Config._load_indices(None, None)
+    by_name = {i.name: i for i in indices}
+    for nm in ("沪深300", "科创50", "创业板50", "恒生科技", "北证50", "港股创新药ETF"):
+        assert by_name[nm].role == "target", nm
+    for nm in ("十年期国债ETF", "黄金9999"):
+        assert by_name[nm].role == "observe", nm
+    print("PASS test_indices_json_roles")
+
+
 if __name__ == "__main__":
     test_infer_api_by_ts_code()
     test_explicit_api_wins()
     test_invalid_api_raises()
+    test_role_default_and_validate()
+    test_indices_json_roles()
     print("test_config OK")

@@ -22,6 +22,18 @@ class ConfigError(Exception):
     pass
 
 
+# ---------- 牛市增强目标仓位策略参数（六个目标仓位标的统一使用，不为单标的单独调参） ----------
+# 牛市判定：已完成周收盘 > 50周EMA × (1+0.02) 且 当前50周EMA > 8周前50周EMA
+BULL_EMA_WEEKS = 50            # 牛市 EMA 的周跨度（EMA50，用已完成周收盘）
+BULL_SLOPE_LOOKBACK_WEEKS = 8  # EMA50 斜率回看周数（当前 EMA50 与 8 周前比较）
+BULL_CLOSE_BUFFER = 0.02       # 周收盘相对 EMA50 的缓冲阈值（严格大于才算牛市）
+
+# 增强版：ΔBAR₂D 与 0.4×σ20 动态阈值 + 已完成周 BAR 未恶化
+ENHANCED_SIGMA_WINDOW = 20       # σ20 滚动窗口（最近 20 个交易日的 ΔBAR₂D 快照）
+ENHANCED_SIGMA_MIN_PERIODS = 10  # σ20 最小样本数（不足则视为缺失，不生成买入）
+ENHANCED_THRESHOLD_MULTIPLIER = 0.4  # 阈值倍数：threshold = 0.4 × σ20
+
+
 @dataclass
 class IndexConfig:
     name: str
@@ -29,6 +41,7 @@ class IndexConfig:
     api: str = ""  # 可选；留空则按 ts_code 自动推断（见 _infer_api）
     lookback: int = 120
     basis: str = "daily"  # 判定依据周期：daily / 2d / weekly
+    role: str = "target"  # 标的角色：target（参与目标仓位/牛市判断）/ observe（仅观察展示）
 
     def __post_init__(self) -> None:
         # 未显式指定 api 时，按 ts_code 后缀/格式自动推断，用户无需感知接口细节
@@ -64,6 +77,16 @@ class IndexConfig:
             raise ConfigError(
                 f"标的 {self.name} 的 basis 非法: {self.basis!r}，应为 {sorted(allowed_basis)}"
             )
+        allowed_role = {"target", "observe"}
+        if self.role not in allowed_role:
+            raise ConfigError(
+                f"标的 {self.name} 的 role 非法: {self.role!r}，应为 {sorted(allowed_role)}"
+            )
+
+    @property
+    def is_target(self) -> bool:
+        """是否为目标仓位标的（参与牛市判定 + 增强版目标仓位重放）。"""
+        return self.role == "target"
 
 
 @dataclass

@@ -1,4 +1,4 @@
-"""Markdown 渲染测试：验证括号前周期值与分块格式。"""
+"""Markdown 渲染测试：验证牛市增强目标仓位卡片（颜色/牛市列/分组/格式）与 2026-09-18 黄金样例。"""
 import os
 import sys
 
@@ -9,7 +9,10 @@ from signals import PeriodMACD, Signal
 import templates as templates_mod
 
 
-def _sig(name, code, status, bar, bp, price=100.0, basis="daily", pct_change=None):
+def _sig(
+    name, code, bar, bp, price=100.0, basis="daily", pct_change=None,
+    role="target", bull_status="", target_position="", strategy_reason="", status="HOLD",
+):
     return Signal(
         name, code, status,
         PeriodMACD(bar, bp, "前1日"),
@@ -18,85 +21,161 @@ def _sig(name, code, status, bar, bp, price=100.0, basis="daily", pct_change=Non
         price=price,
         pct_change=pct_change,
         basis=basis,
+        role=role,
+        bull_status=bull_status,
+        target_position=target_position,
+        strategy_reason=strategy_reason,
     )
 
 
-def test_render_format():
+def _target(name, code, bull, tp, bar=0.5, bp=0.3, price=100.0, pct=0.5, basis="2d"):
+    return _sig(name, code, bar, bp, price=price, basis=basis, pct_change=pct,
+                role="target", bull_status=bull, target_position=tp)
+
+
+def test_card_colors_and_headers():
+    """买入🔴/卖出🟢；买卖表表头严格为 标的|牛市|价格|日|2日|周；判定规则文案更新。"""
     results = [
-        _sig("沪深300", "000300.SH", "BUY", 0.88, 0.66, price=4618.90, pct_change=0.35),
-        _sig("科创50", "000688.SH", "SELL", -0.36, -0.30, price=1653.55, pct_change=-1.20),
-        _sig("恒生科技", "HKTECH", "MISSING", None, None),
-        _sig("国债", "511260.SH", "HOLD", 0.10, 0.10, price=135.77),
+        _target("沪深300", "000300.SH", "NON_BULL", "TARGET_HOLD"),
+        _target("恒生科技", "HKTECH", "NON_BULL", "TARGET_CASH"),
     ]
-    md = templates_mod.render(results, "2026-08-22")
-    # 买入/卖出块为表格：含表头（标的后加价格列）+ 数据行（单元格无 <br>）
-    assert "| 标的 | 价格 | 日 | 2日 | 周 |" in md
-    assert "|:---:|:---:|:---:|:---:|:---:|" in md
-    # 价格列带涨跌%（全角括号、正负号）
-    assert "4618.90（+0.35%）" in md
-    assert "1653.55（-1.20%）" in md
-    # 无 pct_change 时价格列只显示价格（国债 HOLD 在未触发块的价格另算，此处校验买卖块即可）
-    # 默认 basis=daily：日 列单元格被加粗高亮（含 ** 标记）
-    assert "**" in md and "0.88↑（0.66）" in md          # 买入行日MACD值存在且有加粗
-    assert "1653.55" in md                                # 卖出行价格
-    assert "<br>" not in md                               # 确认不再输出 <br>
-    # 表格不应再出现旧的列表前缀写法
-    assert "- **沪深300**" not in md
-    # 未触发/数据缺失仍为列表
-    assert "数据缺失" in md
-    assert "- **国债** (511260.SH)：" in md
-    assert "不构成投资建议" in md
-    assert "今日买入信号" in md and "今日卖出信号" in md
-    # 判定规则文案已更新
-    assert "判定规则：根据日/2日/周MACD识别买入或卖出" in md
-    print("=== render 预览 ===")
+    md = templates_mod.render(results, "2026-09-18", hour=15)
+    assert "## 🔴 今日买入信号" in md
+    assert "## 🟢 今日卖出信号" in md
+    assert "| 标的 | 牛市 | 价格 | 日 | 2日 | 周 |" in md
+    assert "判定规则：牛市保持持仓；非牛市按macd策略增强版判断是否买入" in md
+    # 标题格式不变
+    assert "# 📊 指数MACD信号下午报 (2026-09-18)" in md
+    # 无「继续持有」区块
+    assert "继续持有" not in md
+    print("PASS test_card_colors_and_headers")
+
+
+def test_bull_column_icons_and_position():
+    """牛市列位于标的之后：BULL→✅、NON_BULL→❌。"""
+    results = [
+        _target("科创50", "000688.SH", "BULL", "TARGET_HOLD"),
+        _target("沪深300", "000300.SH", "NON_BULL", "TARGET_HOLD"),
+    ]
+    md = templates_mod.render(results, "2026-09-18", hour=15)
+    kchuang = [ln for ln in md.splitlines() if ln.startswith("| 科创50")][0]
+    cells = [c.strip() for c in kchuang.split("|")]
+    # cells: ['', 标的, 牛市, 价格, 日, 2日, 周, '']
+    assert cells[1] == "科创50"
+    assert cells[2] == "✅", cells
+    hs300 = [ln for ln in md.splitlines() if ln.startswith("| 沪深300")][0]
+    assert [c.strip() for c in hs300.split("|")][2] == "❌"
+    print("PASS test_bull_column_icons_and_position")
+
+
+def test_grouping_by_target_position():
+    """买入表读 TARGET_HOLD、卖出表读 TARGET_CASH；牛市标的必入买入表。"""
+    results = [
+        _target("科创50", "000688.SH", "BULL", "TARGET_HOLD"),        # 牛市 → 买入
+        _target("恒生科技", "HKTECH", "NON_BULL", "TARGET_CASH"),      # 非牛卖出
+    ]
+    md = templates_mod.render(results, "2026-09-18", hour=15)
+    buy_block = md.split("## 🔴 今日买入信号")[1].split("## 🟢")[0]
+    sell_block = md.split("## 🟢 今日卖出信号")[1].split("## 📌")[0]
+    assert "科创50" in buy_block and "科创50" not in sell_block
+    assert "恒生科技" in sell_block and "恒生科技" not in buy_block
+    print("PASS test_grouping_by_target_position")
+
+
+def test_observe_table_no_bull_column():
+    """观察表保持 标的|价格|日|2日|周，不增加牛市列。"""
+    results = [
+        _target("沪深300", "000300.SH", "NON_BULL", "TARGET_HOLD"),
+        _sig("十年期国债ETF", "511260.SH", -0.02, -0.02, price=134.72, basis="daily",
+             pct_change=0.02, role="observe", status="HOLD"),
+    ]
+    md = templates_mod.render(results, "2026-09-18", hour=15)
+    assert "## 观察指标" in md
+    observe_block = md.split("## 观察指标")[1]
+    assert "| 标的 | 价格 | 日 | 2日 | 周 |" in observe_block
+    # 观察块内不应出现牛市列表头
+    assert "| 标的 | 牛市 |" not in observe_block
+    print("PASS test_observe_table_no_bull_column")
+
+
+def test_untriggered_only_on_failure():
+    """无失败时不渲染未触发；有失败（UNKNOWN/MISSING）时渲染 标的|原因。"""
+    ok = [_target("沪深300", "000300.SH", "NON_BULL", "TARGET_HOLD")]
+    md_ok = templates_mod.render(ok, "2026-09-18", hour=15)
+    assert "未触发" not in md_ok
+
+    with_fail = ok + [
+        _target("某标的", "X.SH", "UNKNOWN", "UNKNOWN"),  # 牛市 UNKNOWN → 未触发
+    ]
+    md_fail = templates_mod.render(with_fail, "2026-09-18", hour=15)
+    assert "## — 未触发" in md_fail
+    assert "| 标的 | 原因 |" in md_fail
+    print("PASS test_untriggered_only_on_failure")
+
+
+def test_golden_20260918():
+    """2026-09-18 线上页面为黄金样例：固化列顺序、括号、精度、箭头、粗体与分组。"""
+    def g(name, code, bull, tp, price, pct, d, dp, p2, p2p, w, wp):
+        return Signal(
+            name, code, "HOLD",
+            PeriodMACD(d, dp, "前1日"), PeriodMACD(p2, p2p, "前2日"), PeriodMACD(w, wp, "前1周"),
+            price=price, pct_change=pct, basis="2d", role="target",
+            bull_status=bull, target_position=tp,
+        )
+
+    def o(name, code, price, pct, d, dp, p2, p2p, w, wp, basis="2d"):
+        return Signal(
+            name, code, "HOLD",
+            PeriodMACD(d, dp, "前1日"), PeriodMACD(p2, p2p, "前2日"), PeriodMACD(w, wp, "前1周"),
+            price=price, pct_change=pct, basis=basis, role="observe",
+        )
+
+    results = [
+        g("沪深300", "000300.SH", "NON_BULL", "TARGET_HOLD", 4504.84, 1.00, -9.50, -16.70, -14.40, -17.78, -70.81, -70.95),
+        g("科创50", "000688.SH", "BULL", "TARGET_HOLD", 1649.79, 2.71, 18.50, 8.78, -9.13, -22.83, -77.39, -87.07),
+        g("创业板50", "399673.SZ", "NON_BULL", "TARGET_HOLD", 3502.38, 2.13, 13.35, 0.65, -2.63, -16.24, -182.03, -197.11),
+        g("港股创新药ETF", "513120.SH", "BULL", "TARGET_HOLD", 1.29, 0.86, -0.012, -0.023, -0.011, -0.013, 0.04, 0.05),
+        g("恒生科技", "HKTECH", "NON_BULL", "TARGET_CASH", 4400.90, 2.09, -14.84, -34.69, -67.49, -82.87, -10.43, 2.42),
+        g("北证50", "899050.BJ", "NON_BULL", "TARGET_CASH", 1037.36, 1.11, -5.60, -7.62, 4.67, 5.34, -13.98, -17.70),
+        o("十年期国债ETF", "511260.SH", 134.72, 0.02, -0.021, -0.024, -0.04, -0.04, 0.04, 0.05, basis="daily"),
+        o("黄金9999", "AU9999", 947.59, 1.37, -8.26, -11.06, -0.98, -0.59, 8.96, 9.67),
+    ]
+    md = templates_mod.render(results, "2026-09-18", hour=15)
+
+    # 分组：买入含四个、卖出含两个
+    buy_block = md.split("## 🔴 今日买入信号")[1].split("## 🟢")[0]
+    sell_block = md.split("## 🟢 今日卖出信号")[1].split("## 观察指标")[0]
+    for nm in ("沪深300", "科创50", "创业板50", "港股创新药ETF"):
+        assert nm in buy_block, f"{nm} 应在买入表"
+    for nm in ("恒生科技", "北证50"):
+        assert nm in sell_block, f"{nm} 应在卖出表"
+
+    # 价格括号（全角、正负号、两位小数）
+    assert "4504.84（+1.00%）" in md
+    assert "1037.36（+1.11%）" in md
+    # 目标仓位改造后不再按 basis 高亮判定列：整卡无加粗 MACD 单元格
+    assert "**-14.40↑（-17.78）**" not in md
+    assert "-14.40↑（-17.78）" in md
+    # 箭头：当前值 > 上一值 → ↑（沪深300 日），当前值 < 上一值 → ↓（恒生科技 周）
+    assert "-9.50↑（-16.70）" in md
+    assert "-10.43↓（2.42）" in md
+    # 观察表无牛市列，两位小数
+    observe_block = md.split("## 观察指标")[1]
+    assert "134.72（+0.02%）" in observe_block
+    assert "| 标的 | 价格 | 日 | 2日 | 周 |" in observe_block
+    # 当天无失败 → 无未触发块
+    assert "未触发" not in md
+    # 无继续持有
+    assert "继续持有" not in md
+    print("=== 9-18 黄金样例渲染 ===")
     print(md)
-    print("=== 结束 ===")
-    print("PASS test_render_format")
-
-
-def test_basis_highlight_column():
-    """basis 决定高亮列：daily 高亮日MACD，weekly 高亮周MACD。"""
-    # weekly basis：周MACD 单元格被加粗，日MACD 不被加粗
-    r = _sig("国债ETF", "511260.SH", "SELL", 0.10, 0.20, price=135.0, basis="weekly")
-    md = templates_mod.render([r], "2026-08-22")
-    # 找到该行，周MACD（第 5 列）应含加粗包裹
-    row = [ln for ln in md.splitlines() if ln.startswith("| 国债ETF")][0]
-    cells = [c.strip() for c in row.split("|")]
-    # cells: ['', 标的, 价格, 日, 2日, 周, '']
-    assert "**" in cells[5], f"周MACD 列应高亮: {cells[5]}"     # 判定依据列（周）
-    assert "**" not in cells[3], f"日MACD 列不应高亮: {cells[3]}"  # 非判定列
-    print("PASS test_basis_highlight_column")
-
-
-def test_other_section_hidden_when_empty():
-    """无未触发/数据缺失标的时，不展示"未触发 / 数据缺失"分块；有则展示。"""
-    # 全为买/卖，无 HOLD/MISSING
-    only_signals = [
-        _sig("沪深300", "000300.SH", "BUY", 0.88, 0.66),
-        _sig("科创50", "000688.SH", "SELL", -0.36, -0.30),
-    ]
-    md = templates_mod.render(only_signals, "2026-08-22")
-    assert "未触发 / 数据缺失" not in md
-
-    # 含一个 HOLD → 应出现该分块
-    with_other = only_signals + [_sig("国债", "511260.SH", "HOLD", 0.10, 0.10)]
-    md2 = templates_mod.render(with_other, "2026-08-22")
-    assert "## — 未触发 / 数据缺失" in md2
-    print("PASS test_other_section_hidden_when_empty")
+    print("PASS test_golden_20260918")
 
 
 def test_session_title():
     """标题按传入 hour 决定时段：<11 上午 | 11~13 中午 | >=13 下午。"""
-    sig = [_sig("沪深300", "000300.SH", "BUY", 0.88, 0.66)]
-    cases = {
-        9: "上午",   # 10:00 触发场景
-        10: "上午",
-        11: "中午",  # 11:45 触发场景（边界：11 点归中午）
-        12: "中午",
-        13: "下午",  # 14:30 触发场景（边界：13 点归下午）
-        15: "下午",
-    }
+    sig = [_target("沪深300", "000300.SH", "NON_BULL", "TARGET_HOLD")]
+    cases = {9: "上午", 10: "上午", 11: "中午", 12: "中午", 13: "下午", 15: "下午"}
     for hour, label in cases.items():
         md = templates_mod.render(sig, "2026-08-22", hour=hour)
         assert f"# 📊 指数MACD信号{label}报 (2026-08-22)" in md, f"hour={hour} 期望 {label}"
@@ -104,6 +183,11 @@ def test_session_title():
 
 
 if __name__ == "__main__":
-    test_render_format()
+    test_card_colors_and_headers()
+    test_bull_column_icons_and_position()
+    test_grouping_by_target_position()
+    test_observe_table_no_bull_column()
+    test_untriggered_only_on_failure()
+    test_golden_20260918()
     test_session_title()
     print("test_render OK")
