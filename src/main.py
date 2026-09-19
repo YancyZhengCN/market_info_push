@@ -56,11 +56,12 @@ def _process_index(idx: config_mod.IndexConfig, cfg: config_mod.Config, pro, tod
                 pct_change = (float(close.iloc[-1]) - prev_close) / prev_close * 100
 
         # 目标仓位标的：跑牛市增强策略并按历史重放目标仓位
-        bull_status = target_position = strategy_reason = bull_reason = ""
+        bull_status = target_position = enhanced_position = strategy_reason = bull_reason = ""
         if idx.is_target:
             decision = strategy_mod.decide_target_position(close)
             bull_status = decision.bull.status
             target_position = decision.state
+            enhanced_position = decision.enhanced_position
             strategy_reason = decision.reason
             bull_reason = decision.bull.reason
             _log_strategy(idx, date_of(close), decision)
@@ -70,14 +71,16 @@ def _process_index(idx: config_mod.IndexConfig, cfg: config_mod.Config, pro, tod
             role=idx.role,
             bull_status=bull_status,
             target_position=target_position,
+            enhanced_position=enhanced_position,
             strategy_reason=strategy_reason,
             bull_reason=bull_reason,
         )
         logger.info(
-            "标的 %s → status=%s target=%s bull=%s (判定周期 %s | 日BAR %.4f / 前1日 %.4f)",
+            "标的 %s → status=%s target=%s enhanced_target=%s bull=%s (判定周期 %s | 日BAR %.4f / 前1日 %.4f)",
             idx.name,
             sig.status,
             target_position or "-",
+            enhanced_position or "-",
             bull_status or "-",
             idx.basis,
             d.bar if d.bar is not None else float("nan"),
@@ -106,11 +109,11 @@ def _log_strategy(idx: config_mod.IndexConfig, date_str: str, decision) -> None:
         return f"{x:.4f}" if isinstance(x, (int, float)) else "NA"
 
     logger.info(
-        "[策略] %s %s | 增强版事件=%s 目标仓位=%s 牛市=%s | "
+        "[策略] %s %s | 增强版事件=%s 目标仓位=%s 增强版独立仓位=%s 牛市=%s | "
         "ΔBAR2D=%s σ20=%s 0.4σ20=%s 已完成周BAR=%s 前一已完成周BAR=%s | "
         "已完成周收盘=%s EMA50=%s %d周前EMA50=%s | 原因: %s / %s",
         idx.name, date_str,
-        enh.event, decision.state, bull.status,
+        enh.event, decision.state, decision.enhanced_position, bull.status,
         _f(enh.delta_bar_2d), _f(enh.sigma20), _f(enh.threshold),
         _f(enh.weekly_bar_completed), _f(enh.weekly_bar_completed_prev),
         _f(bull.weekly_close_completed), _f(bull.ema50),

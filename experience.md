@@ -374,3 +374,17 @@
 - **纯判定 `_classify_bull`**：把牛市三态判断抽成不依赖 pandas 的纯函数，能用精确取值（101/100/99 等）覆盖
   说明里的边界矩阵，也让"buffer=0.02/slope=8 回滚等价旧规则"可直接单测验证。与 `_classify_enhanced_event` 同构。
 - 原因文本去掉"高于50周EMA 2%""8周斜率"等写死描述，改为按 `slope` 参数化，避免与实际参数不符。
+
+## 15. 信号列展示牛市与增强版独立状态（2026-09-19）
+
+> 需求见根目录 `market_info_push_信号列展示牛市与增强版状态改造说明.md`；只加可见性，不改策略与分组。
+
+- `牛市`列改名 `信号`，双槽位「牛市/增强版」：`🐮`=牛市成立、`⭕️`=增强版**独立**重放当前应持仓、`-`=不满足；
+  固定四种 `🐮/⭕️`、`🐮/-`、`-/⭕️`、`-/-`（含 UNKNOWN 都落 `-`）。旧 `✅/❌` 移除。
+- **独立重放 ≠ 当天事件**：`⭕️` 不是"今天 BUY"，而是 `replay_enhanced_position(events)`（BUY→持仓、SELL→空仓、
+  HOLD/ERROR 继承）重放后的当前状态，所以 HOLD 期间也能持续显示，SELL 后立即消失。这是与 `replay_target_position`
+  并列的**第二条**重放线，区别只在于它**不看牛市**、UNKNOWN 不跳过（HOLD 起始保持 UNKNOWN）。
+- **两个状态不同源**：信号列右槽是增强版独立状态，表格分组仍只看组合状态机 `target_position`。
+  故会出现"在买入表但信号 `-/-`"（组合继承持仓、牛市与增强版独立都不支持），是预期、非 bug。禁止在模板层对两个图标做逻辑或来定分组。
+- 字段：`TargetPositionDecision.enhanced_position` + `Signal.enhanced_position`，一路透传；`missing_signal` 目标标的置 UNKNOWN。
+- 模板只经 `_fmt_strategy_signals(r)` 单一入口拼双槽位，`_signal_row` 不重复判断。备注必须随功能一起上线（双槽位说明+⭕️重放语义）。

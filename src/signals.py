@@ -44,7 +44,8 @@ class Signal:
     role: str = "target"        # 标的角色：target（目标仓位）/ observe（仅观察）
     # ---- 牛市增强目标仓位（仅 target 标的有效；observe 标的留空） ----
     bull_status: str = ""       # BULL / NON_BULL / UNKNOWN
-    target_position: str = ""   # TARGET_HOLD / TARGET_CASH / UNKNOWN
+    target_position: str = ""   # TARGET_HOLD / TARGET_CASH / UNKNOWN（最终组合状态，决定分组）
+    enhanced_position: str = "" # TARGET_HOLD / TARGET_CASH / UNKNOWN（增强版独立重放，仅展示⭕️）
     strategy_reason: str = ""   # 目标仓位判定原因（日志/说明用）
     bull_reason: str = ""       # 牛市判定原因（日志/说明用）
 
@@ -82,6 +83,7 @@ def build_signal(
     role: str = "target",
     bull_status: str = "",
     target_position: str = "",
+    enhanced_position: str = "",
     strategy_reason: str = "",
     bull_reason: str = "",
 ) -> Signal:
@@ -107,6 +109,7 @@ def build_signal(
         role=role,
         bull_status=bull_status,
         target_position=target_position,
+        enhanced_position=enhanced_position,
         strategy_reason=strategy_reason,
         bull_reason=bull_reason,
     )
@@ -125,6 +128,7 @@ def missing_signal(name: str, ts_code: str, basis: str = "daily", role: str = "t
         # 取数/计算失败：目标仓位标的进未触发；observe 标的进观察失败
         bull_status="UNKNOWN" if role == "target" else "",
         target_position="UNKNOWN" if role == "target" else "",
+        enhanced_position="UNKNOWN" if role == "target" else "",
         strategy_reason="取数或计算失败",
         bull_reason="",
     )

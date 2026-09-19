@@ -42,21 +42,25 @@ def test_build_signal_passthrough_target_position():
     d = macd_mod.compute(close, "daily")
     sig = signal_mod.build_signal(
         "测试", "X", d, d, d, role="target",
-        bull_status="NON_BULL", target_position="TARGET_CASH", strategy_reason="重放",
+        bull_status="NON_BULL", target_position="TARGET_CASH",
+        enhanced_position="TARGET_HOLD", strategy_reason="重放",
     )
     # 即使 MACD 上行（status 可能 BUY），target_position 仍为策略层给的 TARGET_CASH
     assert sig.target_position == "TARGET_CASH"
     assert sig.bull_status == "NON_BULL"
+    # 增强版独立仓位原样透传（与最终 target_position 可以不同）
+    assert sig.enhanced_position == "TARGET_HOLD"
     assert sig.is_target is True
     print("PASS test_build_signal_passthrough_target_position")
 
 
 def test_missing_signal_role_aware():
-    """目标标的失败→target_position=UNKNOWN；观察标的失败不设 target_position。"""
+    """目标标的失败→target/enhanced=UNKNOWN；观察标的失败不设这些字段。"""
     t = signal_mod.missing_signal("目标", "X", role="target")
     assert t.target_position == "UNKNOWN" and t.bull_status == "UNKNOWN"
+    assert t.enhanced_position == "UNKNOWN"
     o = signal_mod.missing_signal("观察", "Y", role="observe")
-    assert o.target_position == "" and o.is_target is False
+    assert o.target_position == "" and o.enhanced_position == "" and o.is_target is False
     print("PASS test_missing_signal_role_aware")
 
 

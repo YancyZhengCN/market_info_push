@@ -59,6 +59,7 @@ class TargetPositionDecision:
     reason: str
     bull: BullMarketDecision
     enhanced: EnhancedDecision
+    enhanced_position: str = UNKNOWN  # 增强版**独立**历史重放的当前仓位（不受牛市覆盖），仅用于展示/解释
 
 
 # ---------------------------------------------------------------------------
@@ -335,6 +336,31 @@ def _as_bull_status(x) -> str:
     return x.status if isinstance(x, BullMarketDecision) else str(x)
 
 
+def replay_enhanced_position(enhanced_events: pd.Series) -> "pd.Series":
+    """增强版**独立**仓位历史重放（不考虑牛市覆盖），返回每日 TARGET_HOLD / TARGET_CASH / UNKNOWN。
+
+    仅用于卡片「信号」列右槽的 ⭕️ 展示与解释，不参与最终目标仓位分组。
+    转换规则（改造说明「增强版独立重放」）：
+      - BUY  → TARGET_HOLD
+      - SELL → TARGET_CASH
+      - HOLD → 继承前一状态（起始为 UNKNOWN 则保持 UNKNOWN）
+      - ERROR→ 保持前一状态
+    纯函数：同一事件历史重复执行结果完全一致。
+    """
+    idx = enhanced_events.index
+    state = UNKNOWN
+    states: list[str] = []
+    for ts in idx:
+        ev = _as_event(enhanced_events.loc[ts])
+        if ev == EV_BUY:
+            state = TARGET_HOLD
+        elif ev == EV_SELL:
+            state = TARGET_CASH
+        # HOLD / ERROR：继承前一状态（state 不变）
+        states.append(state)
+    return pd.Series(states, index=idx, dtype=object)
+
+
 # ---------------------------------------------------------------------------
 # 组装：单标的目标仓位决策（供 main / 展示层调用）
 # ---------------------------------------------------------------------------
@@ -350,11 +376,14 @@ def decide_target_position(close: pd.Series) -> TargetPositionDecision:
             UNKNOWN, "无收盘数据", None, None, None,
             config_mod.BULL_SLOPE_LOOKBACK_WEEKS, config_mod.BULL_CLOSE_BUFFER,
         )
-        return TargetPositionDecision(UNKNOWN, "无收盘数据", empty_bull, empty_enh)
+        return TargetPositionDecision(
+            UNKNOWN, "无收盘数据", empty_bull, empty_enh, enhanced_position=UNKNOWN,
+        )
 
     enhanced = evaluate_enhanced(close)
     bull = evaluate_bull_market(close)
     target = replay_target_position(enhanced, bull)
+    enhanced_pos = replay_enhanced_position(enhanced)
 
     last = close.index[-1]
     enh_last: EnhancedDecision = enhanced.loc[last]
@@ -367,4 +396,10 @@ def decide_target_position(close: pd.Series) -> TargetPositionDecision:
         reason = "牛市持有 → 目标持仓"
     else:
         reason = f"非牛市，增强版历史重放 → {state}"
-    return TargetPositionDecision(state=state, reason=reason, bull=bull_last, enhanced=enh_last)
+    return TargetPositionDecision(
+        state=state,
+        reason=reason,
+        bull=bull_last,
+        enhanced=enh_last,
+        enhanced_position=str(enhanced_pos.loc[last]),
+    )

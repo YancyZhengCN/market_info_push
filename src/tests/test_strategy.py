@@ -59,6 +59,47 @@ def test_replay_deterministic():
 
 
 # ---------------------------------------------------------------------------
+# 增强版独立仓位重放（不受牛市覆盖，仅用于信号列 ⭕️）
+# ---------------------------------------------------------------------------
+def _replay_enh(events):
+    idx = pd.RangeIndex(len(events))
+    return list(st.replay_enhanced_position(pd.Series(events, index=idx)))
+
+
+def test_replay_enhanced_position_cases():
+    # BUY 后持仓，HOLD 继承
+    assert _replay_enh(["BUY", "HOLD", "HOLD"]) == ["TARGET_HOLD", "TARGET_HOLD", "TARGET_HOLD"]
+    # SELL 后空仓，HOLD 继承
+    assert _replay_enh(["SELL", "HOLD"]) == ["TARGET_CASH", "TARGET_CASH"]
+    # 起始只有 HOLD → 保持 UNKNOWN
+    assert _replay_enh(["HOLD", "HOLD"]) == ["UNKNOWN", "UNKNOWN"]
+    # ERROR 保持前一状态，SELL 立即翻空
+    assert _replay_enh(["BUY", "ERROR", "HOLD", "SELL"]) == [
+        "TARGET_HOLD", "TARGET_HOLD", "TARGET_HOLD", "TARGET_CASH",
+    ]
+
+
+def test_replay_enhanced_position_independent_of_bull():
+    # 与牛市无关：即使全程会被组合状态机覆盖，这里也只按增强版事件本身重放
+    assert _replay_enh(["SELL", "SELL"]) == ["TARGET_CASH", "TARGET_CASH"]
+
+
+def test_replay_enhanced_position_deterministic():
+    events = ["BUY", "HOLD", "SELL", "HOLD", "BUY"]
+    assert _replay_enh(events) == _replay_enh(events)
+
+
+def test_decide_returns_enhanced_position():
+    # decide_target_position 应带上增强版独立仓位字段
+    n = 500
+    dates = pd.bdate_range(end="2026-09-18", periods=n)
+    vals = 100 + 5 * np.sin(np.arange(n) / 6.0) + np.random.default_rng(9).normal(0, 1, n).cumsum() * 0.5
+    close = pd.Series(vals, index=dates)
+    dec = st.decide_target_position(close)
+    assert dec.enhanced_position in (st.TARGET_HOLD, st.TARGET_CASH, st.UNKNOWN)
+
+
+# ---------------------------------------------------------------------------
 # 增强版事件（用可控收盘序列驱动 evaluate_enhanced 的末日事件）
 # ---------------------------------------------------------------------------
 def _series_last_event(close: pd.Series) -> str:

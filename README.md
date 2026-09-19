@@ -15,7 +15,7 @@
   - **增强版事件**：`ΔBAR₂D<0 → SELL`；`已完成周BAR未恶化 且 ΔBAR₂D>0.4×σ20 → BUY`；否则 `HOLD`；数据缺失 `ERROR`。
   - **牛市判定**：`已完成周收盘 > EMA50 且 EMA50 > 12周前EMA50 → 牛市`（均严格大于，价格缓冲0%）；历史不足 → `UNKNOWN`。参数集中在 `config.py`（`BULL_EMA_WEEKS/BULL_CLOSE_BUFFER/BULL_SLOPE_LOOKBACK_WEEKS`），可回滚旧规则。
   - **目标仓位历史重放**：牛市固定持仓；非牛市按事件更新、HOLD 继承；输出 `TARGET_HOLD/TARGET_CASH/UNKNOWN`。
-- **卡片**：🔴 今日买入信号（当前应持仓）/ 🟢 今日卖出信号（当前应空仓），买卖表在 `标的` 后带 `牛市` 列（`✅/❌`）；观察指标单独成表；仅在失败时显示「未触发」。
+- **卡片**：🔴 今日买入信号（当前应持仓）/ 🟢 今日卖出信号（当前应空仓），买卖表在 `标的` 后带 `信号` 列——双槽位「牛市/增强版」：`🐮`=牛市成立、`⭕️`=增强版**独立**重放当前应持仓、`-`=对应条件不满足（四种：`🐮/⭕️`、`🐮/-`、`-/⭕️`、`-/-`）；观察指标单独成表；仅在失败时显示「未触发」。
 - **推送**：**Server酱³**（`sctapi.ftqq.com`）推送到个人微信，免确认、实时、支持 markdown。`PUSH_ENABLED=false` 时仅本地打印（dry-run），不联网。
 
 ## 目录结构
@@ -28,7 +28,7 @@ src/
 ├── macd.py            # MACD 计算（EMA12/26 → DIF/DEA → BAR）+ 已完成周线公共函数
 ├── strategy.py        # 牛市增强目标仓位：增强版事件 / 牛市判定 / 目标仓位历史重放
 ├── signals.py         # 信号装配（承载 target_position / bull_status）
-├── templates.py       # Markdown 日报渲染（🔴买入/🟢卖出 + 牛市列 + 观察表）
+├── templates.py       # Markdown 日报渲染（🔴买入/🟢卖出 + 信号列双槽位 + 观察表）
 ├── notifier.py        # 企业微信推送（含 dry-run）
 ├── indices.json       # 监控标的清单（含 role）
 ├── requirements.txt   # 依赖

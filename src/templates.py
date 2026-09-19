@@ -42,13 +42,13 @@ def _fmt_cell(m: PeriodMACD) -> str:
     return f"{m.bar:.2f}{m.trend}（{m.bar_prev:.2f}）"
 
 
-# 买入/卖出表：标的后新增「牛市」列，其余列整体后移、相对顺序不变（改造说明「买入表/卖出表」）
+# 买入/卖出表：标的后为「信号」列（牛市/增强版双槽位），其余列整体后移、相对顺序不变
 _SIGNAL_TABLE_HEADER = [
-    "| 标的 | 牛市 | 价格 | 日 | 2日 | 周 |",
+    "| 标的 | 信号 | 价格 | 日 | 2日 | 周 |",
     "|:---:|:---:|:---:|:---:|:---:|:---:|",
 ]
 
-# 观察指标表：保持线上现状，不增加「牛市」列
+# 观察指标表：保持线上现状，不增加「信号」列
 _OBSERVE_TABLE_HEADER = [
     "| 标的 | 价格 | 日 | 2日 | 周 |",
     "|:---:|:---:|:---:|:---:|:---:|",
@@ -60,8 +60,10 @@ _FAILURE_TABLE_HEADER = [
     "|:---:|:---:|",
 ]
 
-# 牛市列图标
-_BULL_ICON = {"BULL": "✅", "NON_BULL": "❌"}
+# 信号列图标：牛市槽 🐮 / 增强版独立仓位槽 ⭕️，各自不成立时用半角短横线占位
+_BULL_SLOT = "🐮"
+_ENHANCED_SLOT = "⭕️"
+_EMPTY_SLOT = "-"
 
 
 def _fmt_price(price: float | None, pct_change: float | None = None) -> str:
@@ -89,12 +91,24 @@ def _macd_cells(r: Signal) -> dict[str, str]:
     }
 
 
+def _fmt_strategy_signals(r: Signal) -> str:
+    """信号列固定双槽位「牛市/增强版」：
+
+        左槽：牛市条件成立 → 🐮，否则 -
+        右槽：增强版**独立**历史重放当前为持仓(TARGET_HOLD) → ⭕️，否则 -
+    两个槽位之间固定用半角斜杠 /；四种结果严格为 🐮/⭕️、🐮/-、-/⭕️、-/-。
+    仅做展示，不据此推导分组（分组只看 target_position）。
+    """
+    bull_slot = _BULL_SLOT if r.bull_status == "BULL" else _EMPTY_SLOT
+    enhanced_slot = _ENHANCED_SLOT if r.enhanced_position == "TARGET_HOLD" else _EMPTY_SLOT
+    return f"{bull_slot}/{enhanced_slot}"
+
+
 def _signal_row(r: Signal) -> str:
-    """买入/卖出行：标的 | 牛市 | 价格 | 日 | 2日 | 周。"""
+    """买入/卖出行：标的 | 信号 | 价格 | 日 | 2日 | 周。"""
     cells = _macd_cells(r)
-    bull = _BULL_ICON.get(r.bull_status, "—")
     return (
-        f"| {r.name} | {bull} | {_fmt_price(r.price, r.pct_change)} | "
+        f"| {r.name} | {_fmt_strategy_signals(r)} | {_fmt_price(r.price, r.pct_change)} | "
         f"{cells['daily']} | {cells['p2d']} | {cells['weekly']} |"
     )
 
@@ -205,7 +219,9 @@ def render(results: list[Signal], date: str, hour: int | None = None) -> str:
         [
             "",
             "## 📌 备注",
-            "- **买入表**=当前应该持仓，**卖出表**=当前不应该持仓；不表示今天刚发生买入/卖出",
+            "- 信号固定为“牛市/增强版”：🐮=牛市条件成立，⭕️=增强版独立判断当前应持仓，-=对应条件未满足",
+            "- ⭕️按增强版BUY/SELL/HOLD历史重放：BUY后显示，HOLD继承原状态，SELL后取消",
+            "- 买入表=当前应该持仓，卖出表=当前不应该持仓；不表示今天刚发生买入/卖出",
             "- 本信号仅供参考，不构成投资建议",
         ]
     )
