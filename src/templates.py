@@ -64,6 +64,9 @@ _FAILURE_TABLE_HEADER = [
 _BULL_SLOT = "🐮"
 _ENHANCED_SLOT = "⭕️"
 _EMPTY_SLOT = "-"
+# WORD JOINER（零宽、禁止此处换行）：夹在斜杠两侧，防止窄屏把 `牛市/增强版` 折成两行。
+# 微信按 Unicode 断行规则换行（价格 4507.39 不被拆断即为证），故用 WJ 消除斜杠/短横处的断行点即可。
+_WJ = "\u2060"
 
 
 def _fmt_price(price: float | None, pct_change: float | None = None) -> str:
@@ -97,11 +100,12 @@ def _fmt_strategy_signals(r: Signal) -> str:
         左槽：牛市条件成立 → 🐮，否则 -
         右槽：增强版**独立**历史重放当前为持仓(TARGET_HOLD) → ⭕️，否则 -
     两个槽位之间固定用半角斜杠 /；四种结果严格为 🐮/⭕️、🐮/-、-/⭕️、-/-。
+    用 WORD JOINER(U+2060) 包裹斜杠，禁止窄屏在此处换行（视觉不变，仍是三个字符）。
     仅做展示，不据此推导分组（分组只看 target_position）。
     """
     bull_slot = _BULL_SLOT if r.bull_status == "BULL" else _EMPTY_SLOT
     enhanced_slot = _ENHANCED_SLOT if r.enhanced_position == "TARGET_HOLD" else _EMPTY_SLOT
-    return f"{bull_slot}/{enhanced_slot}"
+    return f"{bull_slot}{_WJ}/{_WJ}{enhanced_slot}"
 
 
 def _signal_row(r: Signal) -> str:

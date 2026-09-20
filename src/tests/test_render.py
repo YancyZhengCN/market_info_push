@@ -66,9 +66,19 @@ def test_signal_icon_matrix():
     for bull, enh, expected in cases:
         # 用 TARGET_HOLD 保证进买入表可渲染（分组不受信号列影响）
         r = _target("测试", "X.SH", bull, "TARGET_HOLD", enh=enh)
-        cell = templates_mod._fmt_strategy_signals(r)
+        # 剥离零宽 WORD JOINER 后比对可见内容（WJ 仅用于禁止窄屏换行）
+        cell = templates_mod._fmt_strategy_signals(r).replace(templates_mod._WJ, "")
         assert cell == expected, f"bull={bull} enh={enh} 期望 {expected} 实际 {cell}"
     print("PASS test_signal_icon_matrix")
+
+
+def test_signal_slot_has_word_joiner():
+    """信号列用 WORD JOINER 包裹斜杠，禁止窄屏在斜杠处换行。"""
+    r = _target("测试", "X.SH", "NON_BULL", "TARGET_HOLD", enh="TARGET_CASH")
+    cell = templates_mod._fmt_strategy_signals(r)
+    assert templates_mod._WJ in cell
+    assert cell == f"-{templates_mod._WJ}/{templates_mod._WJ}-"
+    print("PASS test_signal_slot_has_word_joiner")
 
 
 def test_signal_column_position():
@@ -76,7 +86,7 @@ def test_signal_column_position():
     r = _target("科创50", "000688.SH", "BULL", "TARGET_HOLD", enh="TARGET_HOLD")
     md = templates_mod.render([r], "2026-09-18", hour=15)
     row = [ln for ln in md.splitlines() if ln.startswith("| 科创50")][0]
-    cells = [c.strip() for c in row.split("|")]
+    cells = [c.strip().replace(templates_mod._WJ, "") for c in row.split("|")]
     # cells: ['', 标的, 信号, 价格, 日, 2日, 周, '']
     assert cells[1] == "科创50"
     assert cells[2] == "🐮/⭕️", cells
@@ -181,11 +191,12 @@ def test_golden_20260918():
     for nm in ("恒生科技", "北证50"):
         assert nm in sell_block, f"{nm} 应在卖出表"
 
-    # 信号双槽位四种组合都出现
-    assert "🐮/⭕️" in md   # 科创50
-    assert "🐮/-" in md     # 港股创新药ETF
-    assert "-/⭕️" in md     # 沪深300
-    assert "-/-" in md       # 恒生科技/北证50
+    # 信号双槽位四种组合都出现（剥离零宽 WJ 后比对可见内容）
+    md_visible = md.replace(templates_mod._WJ, "")
+    assert "🐮/⭕️" in md_visible   # 科创50
+    assert "🐮/-" in md_visible     # 港股创新药ETF
+    assert "-/⭕️" in md_visible     # 沪深300
+    assert "-/-" in md_visible       # 恒生科技/北证50
     assert "✅" not in md and "❌" not in md
 
     # 价格括号（全角、正负号、两位小数）
